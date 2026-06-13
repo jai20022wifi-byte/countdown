@@ -129,6 +129,7 @@
           <div id="vs-date" class="vs-date"></div>
           <div id="vs-clock" class="vs-clock"></div>
         </div>
+        <button id="vs-fs" class="vs-btn-ghost" title="ເຕັມຈໍ" style="display:inline-flex;align-items:center;gap:7px"></button>
         <button id="vs-open-editor" class="vs-btn-primary">ແກ້ໄຂຂໍ້ມູນ</button>
         <button id="vs-back" class="vs-btn-ghost" style="display:none">← ກັບໄປໜ້າຫຼັກ</button>
       </div>
@@ -591,6 +592,22 @@
     refreshBtn.disabled = true;
     syncFromSheet(function(){ refreshBtn.disabled = false; });
   });
+
+  // ---- fullscreen toggle ----
+  var fsBtn = document.getElementById('vs-fs');
+  var ICON_EXPAND = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
+  var ICON_COMPRESS = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3"/></svg>';
+  function fsActive(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+  function updateFsBtn(){ fsBtn.innerHTML = (fsActive() ? ICON_COMPRESS : ICON_EXPAND) + '<span>' + (fsActive() ? 'ຍໍ່ຈໍ' : 'ເຕັມຈໍ') + '</span>'; }
+  fsBtn.addEventListener('click', function(){
+    try {
+      if (fsActive()) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); }
+      else { var el = document.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen).call(el); }
+    } catch(e){}
+  });
+  document.addEventListener('fullscreenchange', updateFsBtn);
+  document.addEventListener('webkitfullscreenchange', updateFsBtn);
+  updateFsBtn();
 
   renderDashboard();
 
