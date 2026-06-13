@@ -1,0 +1,5 @@
+# local-only helpers (not needed for hosting)
+server.js
+เปิดเว็บ.bat
+.claude/
+google-apps-script/

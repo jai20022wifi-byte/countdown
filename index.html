@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="lo">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ນັບຖອຍຫຼັງ ການສັ່ງຊື້ສິນຄ້າ · Vientiane Supplies</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+Lao:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  input,button{font-family:inherit}
+  button{cursor:pointer}
+  input[type=date]{color-scheme:light}
+  @keyframes vsblink{0%,100%{opacity:1}50%{opacity:.25}}
+  @keyframes vsrise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+  body{
+    min-height:100vh;
+    font-family:'Noto Sans Lao','Manrope',sans-serif;
+    color:oklch(0.26 0.02 255);
+    background:
+      radial-gradient(1100px 520px at 12% -8%, oklch(0.95 0.04 245) 0%, transparent 60%),
+      radial-gradient(1000px 600px at 100% 0%, oklch(0.95 0.035 200) 0%, transparent 55%),
+      radial-gradient(900px 700px at 85% 110%, oklch(0.95 0.03 305) 0%, transparent 55%),
+      linear-gradient(180deg, oklch(0.985 0.005 250), oklch(0.965 0.008 250));
+    background-attachment:fixed;
+  }
+
+  /* ===== HEADER ===== */
+  .vs-header{position:sticky;top:0;z-index:30;background:rgba(255,255,255,0.86);backdrop-filter:blur(10px);border-bottom:1px solid oklch(0.91 0.006 250);box-shadow:0 6px 22px -20px oklch(0.4 0.05 255)}
+  .vs-header-inner{max-width:1300px;margin:0 auto;padding:14px 28px;display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
+  .vs-logo{width:46px;height:46px;border-radius:14px;background:oklch(0.95 0.03 240);display:flex;align-items:center;justify-content:center;color:oklch(0.55 0.1 245)}
+  .vs-brand{font-family:'Manrope',sans-serif;font-weight:800;font-size:17px;letter-spacing:0.14em;color:oklch(0.32 0.03 250);white-space:nowrap}
+  .vs-brand-sub{font-size:13px;color:oklch(0.55 0.02 255);font-weight:500}
+  .vs-date{font-family:'Manrope',sans-serif;font-weight:600;font-size:14px;color:oklch(0.5 0.02 255)}
+  .vs-clock{font-family:'Manrope',sans-serif;font-weight:800;font-size:22px;color:oklch(0.3 0.03 250);letter-spacing:-0.01em;font-variant-numeric:tabular-nums}
+  .vs-btn-primary{border:none;background:oklch(0.57 0.1 245);color:#fff;font-weight:700;font-size:14px;padding:11px 18px;border-radius:11px;box-shadow:0 8px 18px -10px oklch(0.57 0.12 245);white-space:nowrap;transition:background .12s}
+  .vs-btn-primary:hover{background:oklch(0.52 0.11 245)}
+  .vs-btn-ghost{border:1px solid oklch(0.88 0.008 250);background:#fff;color:oklch(0.4 0.02 255);font-weight:700;font-size:14px;padding:11px 18px;border-radius:11px;white-space:nowrap;transition:background .12s}
+  .vs-btn-ghost:hover{background:oklch(0.97 0.006 250)}
+
+  /* sync indicator + refresh */
+  .vs-sync{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap;background:oklch(0.96 0.005 255);color:oklch(0.5 0.02 255)}
+  .vs-sync .vs-sync-dot{width:8px;height:8px;border-radius:50%;background:oklch(0.7 0.01 255);display:inline-block}
+  .vs-sync.is-synced{background:oklch(0.96 0.04 155);color:oklch(0.45 0.11 155)} .vs-sync.is-synced .vs-sync-dot{background:oklch(0.6 0.13 155)}
+  .vs-sync.is-busy{background:oklch(0.95 0.04 245);color:oklch(0.48 0.1 245)} .vs-sync.is-busy .vs-sync-dot{background:oklch(0.57 0.13 245);animation:vsblink 1s ease-in-out infinite}
+  .vs-sync.is-offline{background:oklch(0.96 0.05 75);color:oklch(0.5 0.11 72)} .vs-sync.is-offline .vs-sync-dot{background:oklch(0.63 0.15 70)}
+  .vs-refresh{border:1px solid oklch(0.88 0.008 250);background:#fff;color:oklch(0.45 0.06 245);font-family:'Noto Sans Lao',sans-serif;font-weight:700;font-size:13px;padding:9px 15px;border-radius:10px;white-space:nowrap;transition:background .12s}
+  .vs-refresh:hover{background:oklch(0.97 0.02 245)}
+  .vs-refresh:disabled{opacity:.55;cursor:default}
+
+  .vs-page{max-width:1300px;margin:0 auto}
+  .vs-section-title{font-weight:700;font-size:23px;color:oklch(0.28 0.02 255)}
+  .vs-section-sub{font-size:14px;color:oklch(0.55 0.02 255);margin-top:2px}
+
+  /* ===== DASHBOARD ===== */
+  .vs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(262px,1fr));gap:18px}
+  .vs-footer{text-align:center;color:oklch(0.6 0.012 255);font-size:12.5px;margin:34px 0 10px;font-family:'Manrope',sans-serif}
+
+  /* ===== EDITOR ===== */
+  .vs-edit-row{display:flex;gap:14px;align-items:stretch;background:#fff;border:1px solid oklch(0.91 0.006 250);border-radius:16px;padding:14px;margin-bottom:14px;flex-wrap:wrap;box-shadow:0 12px 30px -24px oklch(0.45 0.04 255)}
+  .vs-name-box{width:212px;background:oklch(0.955 0.028 305);border:1px solid oklch(0.9 0.03 305);border-radius:13px;padding:13px 14px;display:flex;flex-direction:column;justify-content:center;gap:6px}
+  .vs-name-lo{width:100%;border:none;background:transparent;font-family:'Noto Sans Lao',sans-serif;font-weight:700;font-size:16px;color:oklch(0.3 0.04 320);outline:none}
+  .vs-name-lo:focus{border-bottom:1px solid oklch(0.6 0.08 320)}
+  .vs-name-en{width:100%;border:none;background:transparent;font-family:'Manrope',sans-serif;font-weight:600;font-size:12.5px;color:oklch(0.5 0.03 320);outline:none}
+  .vs-name-en:focus{border-bottom:1px solid oklch(0.6 0.08 320)}
+  .vs-rounds{display:flex;gap:12px;flex:1;flex-wrap:wrap;align-items:stretch;min-width:280px}
+  .vs-round{width:190px;border:1px solid oklch(0.91 0.006 250);border-radius:12px;padding:12px;background:oklch(0.985 0.004 250);display:flex;flex-direction:column;gap:9px}
+  .vs-round-head{display:flex;align-items:center;justify-content:space-between}
+  .vs-round-num{font-weight:700;font-size:13px;color:oklch(0.5 0.1 245)}
+  .vs-round-del{border:none;background:transparent;color:oklch(0.6 0.02 255);font-size:17px;line-height:1;padding:2px 4px;border-radius:6px;transition:background .12s,color .12s}
+  .vs-round-del:hover{background:oklch(0.94 0.05 27);color:oklch(0.55 0.2 27)}
+  .vs-due-box{background:oklch(0.965 0.06 95);border:1px solid oklch(0.86 0.09 92);border-radius:9px;padding:8px 9px}
+  .vs-due-label{display:block;font-size:11.5px;font-weight:700;color:oklch(0.52 0.11 78);margin-bottom:4px}
+  .vs-due-field{display:flex;align-items:center;gap:6px;background:#fff;border:1px solid oklch(0.84 0.08 92);border-radius:8px;padding:0 9px}
+  .vs-due-field:focus-within{border-color:oklch(0.7 0.12 85)}
+  .vs-due-input{width:100%;border:none;background:transparent;padding:8px 0;font-family:'Manrope',sans-serif;font-weight:600;font-size:14px;color:oklch(0.4 0.06 78);outline:none;text-align:right}
+  .vs-due-unit{font-size:11.5px;font-weight:700;color:oklch(0.6 0.06 80);font-family:'Noto Sans Lao',sans-serif}
+  .vs-field-label{display:block;font-size:11.5px;color:oklch(0.55 0.015 255);margin-bottom:4px}
+  .vs-date-input{width:100%;padding:8px 10px;border:1px solid oklch(0.88 0.008 250);border-radius:8px;font-family:'Manrope',sans-serif;font-size:13px;color:oklch(0.3 0.02 255);background:#fff;outline:none}
+  .vs-date-input:focus{border-color:oklch(0.6 0.1 245)}
+  .vs-add-round{width:148px;border:1.5px dashed oklch(0.78 0.04 245);background:transparent;color:oklch(0.52 0.1 245);font-family:'Noto Sans Lao',sans-serif;font-weight:700;font-size:14px;border-radius:12px;display:flex;align-items:center;justify-content:center;transition:background .12s,border-color .12s}
+  .vs-add-round:hover{background:oklch(0.96 0.03 245);border-color:oklch(0.6 0.08 245)}
+
+  .vs-actionbar{position:fixed;left:0;right:0;bottom:0;z-index:40;background:rgba(255,255,255,0.92);backdrop-filter:blur(10px);border-top:1px solid oklch(0.91 0.006 250);box-shadow:0 -8px 26px -22px oklch(0.4 0.05 255)}
+  .vs-actionbar-inner{max-width:1300px;margin:0 auto;padding:13px 28px;display:flex;align-items:center;justify-content:flex-end;gap:12px}
+  .vs-btn-cancel{border:1px solid oklch(0.88 0.008 250);background:#fff;color:oklch(0.42 0.02 255);font-weight:700;font-size:14px;padding:11px 20px;border-radius:11px;transition:background .12s}
+  .vs-btn-cancel:hover{background:oklch(0.97 0.006 250)}
+  .vs-btn-save{border:none;background:oklch(0.57 0.1 245);color:#fff;font-weight:700;font-size:14px;padding:11px 26px;border-radius:11px;box-shadow:0 8px 18px -10px oklch(0.57 0.12 245);transition:background .12s}
+  .vs-btn-save:hover{background:oklch(0.52 0.11 245)}
+
+  /* toast */
+  .vs-toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%);z-index:60;background:oklch(0.32 0.03 250);color:#fff;font-weight:600;font-size:14px;padding:12px 22px;border-radius:999px;box-shadow:0 16px 34px -14px oklch(0.3 0.05 250);animation:vsrise 0.25s ease;display:flex;align-items:center;gap:9px}
+  .vs-toast-check{width:18px;height:18px;border-radius:50%;background:oklch(0.62 0.13 155);display:inline-flex;align-items:center;justify-content:center;font-size:12px}
+
+  /* image slot (drag-to-replace, persists to localStorage) */
+  .vs-slot{position:relative;width:100%;height:122px;display:block;border-radius:14px;overflow:hidden;background:oklch(0.97 0.005 250);user-select:none}
+  .vs-slot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;-webkit-user-drag:none}
+  .vs-slot .vs-slot-ring{position:absolute;inset:0;pointer-events:none;border:1.5px dashed oklch(0.8 0.02 250);border-radius:14px;transition:border-color .12s}
+  .vs-slot.is-filled .vs-slot-ring{display:none}
+  .vs-slot.is-over .vs-slot-ring{border-color:oklch(0.57 0.13 35)}
+  .vs-slot.is-over::after{content:"";position:absolute;inset:0;background:oklch(0.6 0.13 35 / 0.10);border-radius:14px;pointer-events:none}
+  .vs-slot-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:oklch(0.55 0.015 255);font-size:13px;cursor:pointer;text-align:center;padding:10px}
+  .vs-slot.is-filled .vs-slot-empty{display:none}
+  .vs-slot-ctl{position:absolute;top:8px;right:8px;display:flex;gap:6px;opacity:0;transition:opacity .12s;z-index:2}
+  .vs-slot:hover .vs-slot-ctl{opacity:1}
+  .vs-slot-ctl button{border:0;border-radius:6px;padding:5px 9px;cursor:pointer;background:rgba(0,0,0,.62);color:#fff;font:11px/1 'Manrope',system-ui,sans-serif;backdrop-filter:blur(6px)}
+  .vs-slot-ctl button:hover{background:rgba(0,0,0,.8)}
+</style>
+</head>
+<body>
+  <!-- ===== HEADER ===== -->
+  <div class="vs-header">
+    <div class="vs-header-inner">
+      <div style="display:flex;align-items:center;gap:13px">
+        <div class="vs-logo">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"></circle><path d="M12 7v5l3.2 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </div>
+        <div style="line-height:1.15">
+          <div class="vs-brand">VIENTIANE SUPPLIES</div>
+          <div class="vs-brand-sub">ນັບຖອຍຫຼັງ ການສັ່ງຊື້ສິນຄ້າ</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <div id="vs-sync" class="vs-sync"><span class="vs-sync-dot"></span><span id="vs-sync-text">ເກັບໃນເຄື່ອງ</span></div>
+        <div style="text-align:right;line-height:1.2">
+          <div id="vs-date" class="vs-date"></div>
+          <div id="vs-clock" class="vs-clock"></div>
+        </div>
+        <button id="vs-open-editor" class="vs-btn-primary">ແກ້ໄຂຂໍ້ມູນ</button>
+        <button id="vs-back" class="vs-btn-ghost" style="display:none">← ກັບໄປໜ້າຫຼັກ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== DASHBOARD ===== -->
+  <div id="vs-dashboard" class="vs-page" style="padding:26px 28px 16px">
+    <div style="margin-bottom:20px;display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+      <div>
+        <div class="vs-section-title">ລາຍການນັບຖອຍຫຼັງ</div>
+        <div class="vs-section-sub">ນັບໄປຫາ ວັນຄາດການສັ່ງຊື້ຄັ້ງຕໍ່ໄປ ຂອງແຕ່ລະລາຍການ — ໃກ້ກຳນົດຈະຂຶ້ນສີແດງ ແລະ ກະພິບ</div>
+      </div>
+      <button id="vs-refresh" class="vs-refresh" style="display:none">↻ ໂຫຼດໃໝ່</button>
+    </div>
+    <div id="vs-cards" class="vs-grid"></div>
+    <div class="vs-footer">
+      ນະຄອນຫຼວງວຽງຈັນ &nbsp;•&nbsp; Vientiane Supplies &nbsp;•&nbsp; © 2026
+    </div>
+  </div>
+
+  <!-- ===== EDITOR ===== -->
+  <div id="vs-editor" class="vs-page" style="padding:26px 28px 120px;display:none">
+    <div style="margin-bottom:20px">
+      <div class="vs-section-title">ແກ້ໄຂຂໍ້ມູນການສັ່ງຊື້</div>
+      <div class="vs-section-sub">ໃສ່ວັນທີ <b>ສັ່ງລ່າສຸດ</b> ແລະ <b>ຄາດການສັ່ງຊື້</b> ຂອງແຕ່ລະງວດ &nbsp;·&nbsp; ກົດ “ບັນທຶກ” ເພື່ອເກັບໄວ້</div>
+    </div>
+    <div id="vs-edit-rows"></div>
+  </div>
+
+  <!-- action bar (editor only) -->
+  <div id="vs-actionbar" class="vs-actionbar" style="display:none">
+    <div class="vs-actionbar-inner">
+      <button id="vs-cancel" class="vs-btn-cancel">ຍົກເລີກ</button>
+      <button id="vs-save" class="vs-btn-save">ບັນທຶກ</button>
+    </div>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+  var KEY = 'vs-countdown-products-v5';
+  var IMG_KEY = 'vs-countdown-images-v1';
+
+  // ====== Google Sheet sync ======
+  // ໃສ່ URL ຂອງ Web App ທີ່ deploy ມາຈາກ Google Apps Script ໃສ່ບ່ອນນີ້.
+  // ປ່ອຍຫວ່າງ = ໃຊ້ສະເພາະ browser (localStorage). ເບິ່ງວິທີຕັ້ງຄ່າໃນ GOOGLE-SHEET-SETUP.md
+  var SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbzFS-ifZGes8GjtVq7BFHh4aFOuqWuDOLnYucvKCiEe9fRMw1rw3_Dbt5Fpciqbk_ITbw/exec';
+  function sheetEnabled(){ return /^https:\/\/script\.google\.com\//.test(SHEET_API_URL); }
+  var DEFAULTS = [
+    { id:'p1', nameLo:'ນ້ຳກົດ 98%', nameEn:'Sulfuric Acid 98%', cur:0, rounds:[{ordered:'2026-05-20', predicted:'2026-06-20', due:'12500000'},{ordered:'2026-07-20', predicted:'2026-08-20', due:'7000000'}] },
+    { id:'p2', nameLo:'ແປ້ງອາລູມິນຽມ 64%', nameEn:'Aluminium Hydroxide 64%', cur:0, rounds:[{ordered:'2026-04-15', predicted:'2026-06-30', due:'0'},{ordered:'2026-08-15', predicted:'2026-09-30', due:''}] },
+    { id:'p3', nameLo:'ຍາຂ້າເຊື້ອໂລກນ້ຳ 65%', nameEn:'Calcium Hypochlorite 65%', cur:0, rounds:[{ordered:'2026-06-10', predicted:'2026-06-13', due:'8400000'},{ordered:'2026-08-10', predicted:'2026-08-13', due:''}] },
+    { id:'p4', nameLo:'ແຟັກ', nameEn:'Poly Aluminium Chloride', cur:0, rounds:[{ordered:'2026-03-12', predicted:'2026-06-25', due:'0'},{ordered:'2026-07-12', predicted:'2026-08-25', due:''}] }
+  ];
+
+  var state = { view:'dashboard', products:load(), draft:null, toast:'' };
+  var toastTimer = null;
+
+  // ---------- persistence ----------
+  function load(){
+    try {
+      var s = localStorage.getItem(KEY);
+      if (s){ var a = JSON.parse(s); if (Array.isArray(a) && a.length) return a; }
+    } catch(e){}
+    return JSON.parse(JSON.stringify(DEFAULTS));
+  }
+  function persist(p){ try { localStorage.setItem(KEY, JSON.stringify(p)); } catch(e){} }
+
+  // normalize anything coming back from the sheet into our product shape
+  function normalize(arr){
+    return (arr||[]).map(function(p){
+      return {
+        id: String(p.id||''), nameLo: p.nameLo||'', nameEn: p.nameEn||'', cur: Number(p.cur)||0,
+        rounds: (p.rounds||[]).map(function(r){ return { ordered:r.ordered||'', predicted:r.predicted||'', due:(r.due==null?'':String(r.due)) }; })
+      };
+    });
+  }
+
+  // ---- sync status pill ----
+  function setSyncStatus(s){
+    var pill = document.getElementById('vs-sync');
+    var txt = document.getElementById('vs-sync-text');
+    if (!pill || !txt) return;
+    pill.classList.remove('is-synced','is-busy','is-offline');
+    if (s==='local'){ txt.textContent = 'ເກັບໃນເຄື່ອງ'; }
+    else if (s==='loading'){ pill.classList.add('is-busy'); txt.textContent = 'ກຳລັງໂຫຼດ…'; }
+    else if (s==='saving'){ pill.classList.add('is-busy'); txt.textContent = 'ກຳລັງບັນທຶກ…'; }
+    else if (s==='synced'){ pill.classList.add('is-synced'); txt.textContent = 'ຊິງຄ໌ Google Sheet ✓'; }
+    else if (s==='offline'){ pill.classList.add('is-offline'); txt.textContent = 'ອອບລາຍ — ເກັບໃນເຄື່ອງ'; }
+  }
+
+  // ---- pull latest from the sheet ----
+  function syncFromSheet(cb){
+    if (!sheetEnabled()){ setSyncStatus('local'); if(cb) cb(false); return; }
+    setSyncStatus('loading');
+    fetch(SHEET_API_URL, { method:'GET' })
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        if (j && j.ok && Array.isArray(j.products)){
+          if (j.products.length){
+            state.products = normalize(j.products);
+            persist(state.products);
+            if (state.view==='dashboard') renderDashboard();
+          }
+          setSyncStatus('synced'); if(cb) cb(true);
+        } else { setSyncStatus('offline'); if(cb) cb(false); }
+      })
+      .catch(function(){ setSyncStatus('offline'); if(cb) cb(false); });
+  }
+
+  // ---- push the whole dataset to the sheet ----
+  function pushToSheet(p){
+    if (!sheetEnabled()) return;
+    setSyncStatus('saving');
+    // text/plain body = no CORS preflight (Apps Script can't answer OPTIONS)
+    fetch(SHEET_API_URL, { method:'POST', body: JSON.stringify({ products:p }) })
+      .then(function(r){ return r.json(); })
+      .then(function(j){ setSyncStatus(j && j.ok ? 'synced' : 'offline'); })
+      .catch(function(){ setSyncStatus('offline'); });
+  }
+
+  // user-replaced images { pid: dataUrl }
+  function loadImgs(){ try { var s = localStorage.getItem(IMG_KEY); if(s) return JSON.parse(s)||{}; } catch(e){} return {}; }
+  function saveImgs(m){ try { localStorage.setItem(IMG_KEY, JSON.stringify(m)); } catch(e){} }
+  var userImgs = loadImgs();
+
+  // ---------- date / time helpers ----------
+  function pad(n){ return (n<10?'0':'')+n; }
+  function fmtDate(d){ return pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear(); }
+  function fmtTime(d){ var h=d.getHours(); var ap=h<12?'AM':'PM'; h=h%12; if(h===0)h=12; return pad(h)+':'+pad(d.getMinutes())+':'+pad(d.getSeconds())+' '+ap; }
+  function fmtISO(iso){ if(!iso) return '—'; var p=String(iso).split('-'); if(p.length!==3) return iso; return p[2]+'/'+p[1]+'/'+p[0]; }
+  function parseISO(iso){ var p=String(iso).split('-'); return new Date(+p[0], +p[1]-1, +p[2]); }
+  function today(){ var d=new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+
+  // ---------- live clock ----------
+  var dateEl = document.getElementById('vs-date');
+  var clockEl = document.getElementById('vs-clock');
+  var lastDay = new Date().toDateString();
+  function tick(){
+    var d = new Date();
+    dateEl.textContent = fmtDate(d);
+    clockEl.textContent = fmtTime(d);
+    var ds = d.toDateString();
+    if (ds !== lastDay){ lastDay = ds; if (state.view==='dashboard') renderDashboard(); }
+  }
+  tick();
+  setInterval(tick, 1000);
+
+  // ---------- card model ----------
+  function buildCard(p){
+    var t = today();
+    var rounds = p.rounds || [];
+    var total = rounds.length;
+    var cur = Math.min(Math.max(p.cur||0, 0), Math.max(total-1, 0));
+    var active = (rounds[cur] && rounds[cur].predicted) ? rounds[cur] : null;
+
+    var days = null, level = 'none';
+    if (active){
+      days = Math.round((parseISO(active.predicted) - t) / 86400000);
+      if (days < 0) level='overdue'; else if (days <= 3) level='urgent'; else if (days <= 7) level='soon'; else if (days <= 14) level='amber'; else level='ok';
+    }
+    var C = { ok:'oklch(0.55 0.11 155)', amber:'oklch(0.63 0.13 72)', soon:'oklch(0.56 0.2 27)', urgent:'oklch(0.54 0.21 27)', overdue:'oklch(0.54 0.21 27)', none:'oklch(0.6 0.01 255)' };
+    var T = { ok:'oklch(0.96 0.03 155)', amber:'oklch(0.96 0.05 75)', soon:'oklch(0.96 0.05 27)', urgent:'oklch(0.955 0.05 27)', overdue:'oklch(0.955 0.05 27)', none:'oklch(0.96 0.005 255)' };
+    var B = { ok:'ປົກກະຕິ', amber:'ໃກ້ຮອດກຳນົດ', soon:'ຮີບສັ່ງຊື້', urgent:'ຮີບສັ່ງຊື້', overdue:'ເລີຍກຳນົດແລ້ວ', none:'ບໍ່ມີຂໍ້ມູນ' };
+    var col = C[level], tint = T[level];
+    var isRed = (level==='soon' || level==='urgent' || level==='overdue');
+    var blink = (level==='urgent' || level==='overdue');
+
+    var num = active ? pad(Math.max(days,0)) : '--';
+    var sub;
+    if (!active) sub = 'ຍັງບໍ່ໄດ້ກຳນົດວັນ';
+    else if (days < 0) sub = 'ເລີຍກຳນົດມາ '+Math.abs(days)+' ວັນ';
+    else if (days === 0) sub = 'ຮອດກຳນົດສັ່ງມື້ນີ້';
+    else sub = 'ວັນ ຈົນຮອດກຳນົດສັ່ງ';
+
+    // outstanding (uncollected) across all rounds
+    var dueRounds = 0, dueTotal = 0;
+    rounds.forEach(function(r){ var n = parseFloat(r.due); if (isFinite(n) && n > 0){ dueRounds++; dueTotal += n; } });
+    var hasDue = dueRounds > 0;
+
+    var orderBtnText = (cur < total - 1) ? ('✓ ສັ່ງແລ້ວ — ໄປ ງວດທີ ' + (cur+2)) : 'ສັ່ງແລ້ວ — ກັບໄປ ງວດທີ 1';
+    var orderBtnLast = !(cur < total - 1);
+
+    return {
+      id:p.id, nameLo:p.nameLo, nameEn:p.nameEn, imgId:'vs-img-'+p.id,
+      col:col, tint:tint, isRed:isRed, blink:blink, level:level,
+      num:num, sub:sub, badgeText:B[level],
+      roundLabel: total ? ((cur+1)+'/'+total) : '0/0',
+      orderedStr: active ? fmtISO(active.ordered) : '—',
+      predictedStr: active ? fmtISO(active.predicted) : '—',
+      hasDue:hasDue, dueRounds:dueRounds, dueTotal:dueTotal,
+      dueCountStr: hasDue ? ('ຍັງບໍ່ເກັບເງີນ ' + dueRounds + ' ງວດ') : 'ເກັບເງີນຄົບແລ້ວ',
+      dueAmtStr: hasDue ? (Math.round(dueTotal).toLocaleString('en-US') + ' ກີບ') : '',
+      orderBtnText:orderBtnText, orderBtnLast:orderBtnLast
+    };
+  }
+
+  // ---------- dashboard render ----------
+  var cardsEl = document.getElementById('vs-cards');
+  function el(tag, attrs, children){
+    var n = document.createElement(tag);
+    if (attrs) for (var k in attrs){ if (k==='style') n.style.cssText = attrs[k]; else if (k==='class') n.className = attrs[k]; else if (k==='text') n.textContent = attrs[k]; else n.setAttribute(k, attrs[k]); }
+    (children||[]).forEach(function(c){ if (c!=null) n.appendChild(typeof c==='string'?document.createTextNode(c):c); });
+    return n;
+  }
+
+  function renderDashboard(){
+    cardsEl.innerHTML = '';
+    state.products.map(buildCard).forEach(function(card){
+      var c = card.col;
+      var cardStyle = 'background:#fff;border:1px solid '+(card.isRed?c:'oklch(0.915 0.006 250)')+
+        ';border-radius:20px;padding:16px 16px 18px;display:flex;flex-direction:column;gap:10px;'+
+        (card.isRed ? ('box-shadow:0 0 0 1px '+c+', 0 16px 38px -22px '+c) : 'box-shadow:0 14px 32px -24px oklch(0.45 0.04 255 / 0.6)');
+
+      var wrap = el('div', { style:cardStyle });
+
+      // top row: badge + round label
+      var blinkStyle = card.blink ? 'animation:vsblink 1.05s ease-in-out infinite;' : '';
+      var top = el('div', { style:'display:flex;align-items:center;justify-content:space-between;gap:8px' }, [
+        el('div', { style:'display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;background:'+card.tint+';color:'+c+';font-size:12px;font-weight:700' }, [
+          el('span', { style:'width:8px;height:8px;border-radius:50%;background:'+c+';display:inline-block;'+blinkStyle }),
+          card.badgeText
+        ]),
+        el('div', { style:'display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;background:oklch(0.96 0.005 255);color:oklch(0.45 0.02 255);font-size:11.5px;font-weight:700;white-space:nowrap' }, [
+          'ງວດທີ ', el('span', { style:"font-family:'Manrope',sans-serif", text:card.roundLabel })
+        ])
+      ]);
+      wrap.appendChild(top);
+
+      // big number + ວັນ
+      var numStyle = "font-family:'Manrope','Noto Sans Lao',sans-serif;font-weight:800;font-size:47px;line-height:1;color:"+c+";letter-spacing:-0.02em;"+blinkStyle;
+      wrap.appendChild(el('div', { style:'display:flex;align-items:baseline;gap:9px' }, [
+        el('span', { style:numStyle, text:card.num }),
+        el('span', { style:'font-size:19px;font-weight:700;color:oklch(0.5 0.02 255)', text:'ວັນ' })
+      ]));
+      wrap.appendChild(el('div', { style:'font-size:12.5px;color:oklch(0.55 0.015 255);margin-top:-4px', text:card.sub }));
+
+      // product name (Lo)
+      wrap.appendChild(el('div', { style:'font-weight:700;font-size:18px;color:oklch(0.25 0.02 255);line-height:1.3', text:card.nameLo }));
+
+      // image slot
+      wrap.appendChild(makeImageSlot(card.id));
+
+      // product name (En)
+      wrap.appendChild(el('div', { style:"font-size:12.5px;color:oklch(0.55 0.015 255);font-family:'Manrope',sans-serif;font-weight:500;margin-top:-2px", text:card.nameEn }));
+
+      // divider
+      wrap.appendChild(el('div', { style:'height:1px;background:oklch(0.93 0.005 250);margin:2px 0' }));
+
+      // ordered date row
+      wrap.appendChild(el('div', { style:'display:flex;align-items:center;justify-content:space-between' }, [
+        el('span', { style:'font-size:12.5px;color:oklch(0.55 0.015 255)', text:'ສັ່ງລ່າສຸດ (ເລີ່ມ)' }),
+        el('span', { style:"font-family:'Manrope',sans-serif;font-weight:600;font-size:14px;color:oklch(0.34 0.02 255)", text:card.orderedStr })
+      ]));
+      // predicted date row
+      wrap.appendChild(el('div', { style:'display:flex;align-items:center;justify-content:space-between' }, [
+        el('span', { style:'font-size:12.5px;color:oklch(0.55 0.015 255)', text:'ວັນຄາດການສັ່ງຊື້' }),
+        el('span', { style:"font-family:'Manrope','Noto Sans Lao',sans-serif;font-weight:700;font-size:14px;color:"+c, text:card.predictedStr })
+      ]));
+
+      // due / collection row
+      var dueBg = card.hasDue ? 'oklch(0.965 0.06 95)' : 'oklch(0.965 0.03 155)';
+      var dueBorder = card.hasDue ? 'oklch(0.88 0.08 92)' : 'oklch(0.89 0.05 155)';
+      var dueCountColor = card.hasDue ? 'oklch(0.5 0.12 62)' : 'oklch(0.5 0.11 155)';
+      var dueDotColor = card.hasDue ? 'oklch(0.62 0.16 60)' : 'oklch(0.6 0.13 155)';
+      wrap.appendChild(el('div', { style:'display:flex;align-items:center;justify-content:space-between;margin-top:2px;padding:8px 10px;border-radius:10px;background:'+dueBg+';border:1px solid '+dueBorder }, [
+        el('span', { style:'display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:'+dueCountColor }, [
+          el('span', { style:'width:7px;height:7px;border-radius:50%;background:'+dueDotColor+';display:inline-block' }),
+          card.dueCountStr
+        ]),
+        el('span', { style:"font-family:'Manrope','Noto Sans Lao',sans-serif;font-weight:800;font-size:13.5px;color:oklch(0.5 0.12 62)", text:card.dueAmtStr })
+      ]));
+
+      // order button
+      var obBase = "width:100%;margin-top:4px;border-radius:11px;padding:11px 14px;font-family:'Noto Sans Lao',sans-serif;font-weight:700;font-size:13.5px;cursor:pointer;";
+      var obStyle = card.orderBtnLast
+        ? obBase + 'background:#fff;color:oklch(0.5 0.1 245);border:1.5px solid oklch(0.82 0.05 245)'
+        : obBase + 'border:none;background:oklch(0.57 0.1 245);color:#fff;box-shadow:0 8px 18px -12px oklch(0.57 0.12 245)';
+      var btn = el('button', { style:obStyle, text:card.orderBtnText });
+      btn.addEventListener('click', function(){ onOrdered(card.id); });
+      wrap.appendChild(btn);
+
+      cardsEl.appendChild(wrap);
+    });
+  }
+
+  // ---------- image slot (default photo, drag/click to replace, persists) ----------
+  function makeImageSlot(pid){
+    var slot = el('div', { class:'vs-slot' });
+    var img = el('img', { alt:'' });
+    var ring = el('div', { class:'vs-slot-ring' });
+    var empty = el('div', { class:'vs-slot-empty' }, [
+      (function(){ var s=document.createElementNS('http://www.w3.org/2000/svg','svg'); s.setAttribute('width','26'); s.setAttribute('height','26'); s.setAttribute('viewBox','0 0 24 24'); s.setAttribute('fill','none'); s.setAttribute('stroke','currentColor'); s.setAttribute('stroke-width','1.6'); s.innerHTML='<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>'; s.style.opacity='.5'; return s; })(),
+      el('div', { text:'ລາກຮູບໃສ່' })
+    ]);
+    var ctl = el('div', { class:'vs-slot-ctl' }, [
+      (function(){ var b=el('button',{text:'ປ່ຽນ'}); b.addEventListener('click',function(e){ e.stopPropagation(); file.click(); }); return b; })(),
+      (function(){ var b=el('button',{text:'ລຶບ'}); b.addEventListener('click',function(e){ e.stopPropagation(); clearImg(); }); return b; })()
+    ]);
+    var file = el('input', { type:'file', accept:'image/png,image/jpeg,image/webp,image/avif' });
+    file.style.display = 'none';
+
+    slot.appendChild(img); slot.appendChild(empty); slot.appendChild(ring); slot.appendChild(ctl); slot.appendChild(file);
+
+    function currentSrc(){ return userImgs[pid] || ('images/'+pid+'.png'); }
+    function apply(){
+      var src = currentSrc();
+      if (src){ img.src = src; img.style.display='block'; slot.classList.add('is-filled'); }
+      else { img.removeAttribute('src'); img.style.display='none'; slot.classList.remove('is-filled'); }
+    }
+    function setImg(dataUrl){ userImgs[pid] = dataUrl; saveImgs(userImgs); apply(); }
+    function clearImg(){ delete userImgs[pid]; saveImgs(userImgs); apply(); }
+
+    function ingest(f){
+      if (!f || !/^image\/(png|jpeg|webp|avif)$/.test(f.type)) return;
+      var r = new FileReader();
+      r.onload = function(){ setImg(r.result); };
+      r.readAsDataURL(f);
+    }
+
+    empty.addEventListener('click', function(){ file.click(); });
+    file.addEventListener('change', function(){ var f=file.files&&file.files[0]; if(f) ingest(f); file.value=''; });
+    ['dragenter','dragover'].forEach(function(t){ slot.addEventListener(t, function(e){ e.preventDefault(); e.stopPropagation(); if(e.dataTransfer) e.dataTransfer.dropEffect='copy'; slot.classList.add('is-over'); }); });
+    slot.addEventListener('dragleave', function(){ slot.classList.remove('is-over'); });
+    slot.addEventListener('drop', function(e){ e.preventDefault(); e.stopPropagation(); slot.classList.remove('is-over'); var f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0]; if(f) ingest(f); });
+
+    // hide broken default image gracefully -> show empty state
+    img.addEventListener('error', function(){ if(!userImgs[pid]){ img.style.display='none'; slot.classList.remove('is-filled'); } });
+
+    apply();
+    return slot;
+  }
+
+  // ---------- editor render ----------
+  var editRowsEl = document.getElementById('vs-edit-rows');
+  function renderEditor(){
+    editRowsEl.innerHTML = '';
+    (state.draft||[]).forEach(function(p){
+      var row = el('div', { class:'vs-edit-row' });
+
+      var nameBox = el('div', { class:'vs-name-box' });
+      var inLo = el('input', { class:'vs-name-lo' }); inLo.value = p.nameLo||'';
+      inLo.addEventListener('change', function(){ mutate(function(d){ var x=find(d,p.id); if(x) x.nameLo=inLo.value; }); });
+      var inEn = el('input', { class:'vs-name-en' }); inEn.value = p.nameEn||'';
+      inEn.addEventListener('change', function(){ mutate(function(d){ var x=find(d,p.id); if(x) x.nameEn=inEn.value; }); });
+      nameBox.appendChild(inLo); nameBox.appendChild(inEn);
+      row.appendChild(nameBox);
+
+      var roundsWrap = el('div', { class:'vs-rounds' });
+      (p.rounds||[]).forEach(function(r, idx){
+        var rc = el('div', { class:'vs-round' });
+
+        var head = el('div', { class:'vs-round-head' }, [ el('span', { class:'vs-round-num', text:'ງວດທີ '+(idx+1) }) ]);
+        var del = el('button', { class:'vs-round-del', title:'ລຶບງວດນີ້', text:'×' });
+        del.addEventListener('click', function(){ mutate(function(d){ var x=find(d,p.id); if(x && x.rounds.length>1) x.rounds.splice(idx,1); }); });
+        head.appendChild(del);
+        rc.appendChild(head);
+
+        // ຍັງບໍ່ເກັບເງີນ amount box
+        var dueBox = el('div', { class:'vs-due-box' });
+        dueBox.appendChild(el('label', { class:'vs-due-label', text:'ຍັງບໍ່ເກັບເງີນ' }));
+        var dueField = el('div', { class:'vs-due-field' });
+        var dueInput = el('input', { class:'vs-due-input', inputmode:'decimal', placeholder:'0' }); dueInput.value = r.due||'';
+        dueInput.addEventListener('change', function(){ var v=dueInput.value.replace(/[^0-9.]/g,''); mutate(function(d){ var x=find(d,p.id); if(x && x.rounds[idx]) x.rounds[idx].due=v; }); });
+        dueField.appendChild(dueInput);
+        dueField.appendChild(el('span', { class:'vs-due-unit', text:'ກີບ' }));
+        dueBox.appendChild(dueField);
+        rc.appendChild(dueBox);
+
+        // ordered date
+        var od = el('div'); od.appendChild(el('label', { class:'vs-field-label', text:'ສັ່ງລ່າສຸດ' }));
+        var odIn = el('input', { class:'vs-date-input', type:'date' }); odIn.value = r.ordered||'';
+        odIn.addEventListener('change', function(){ var v=odIn.value; mutate(function(d){ var x=find(d,p.id); if(x && x.rounds[idx]) x.rounds[idx].ordered=v; }); });
+        od.appendChild(odIn); rc.appendChild(od);
+
+        // predicted date
+        var pd = el('div'); pd.appendChild(el('label', { class:'vs-field-label', text:'ຄາດການສັ່ງຊື້' }));
+        var pdIn = el('input', { class:'vs-date-input', type:'date' }); pdIn.value = r.predicted||'';
+        pdIn.addEventListener('change', function(){ var v=pdIn.value; mutate(function(d){ var x=find(d,p.id); if(x && x.rounds[idx]) x.rounds[idx].predicted=v; }); });
+        pd.appendChild(pdIn); rc.appendChild(pd);
+
+        roundsWrap.appendChild(rc);
+      });
+
+      var addBtn = el('button', { class:'vs-add-round', text:'+ ເພີ່ມງວດ' });
+      addBtn.addEventListener('click', function(){ mutate(function(d){ var x=find(d,p.id); if(x) x.rounds.push({ordered:'', predicted:'', due:''}); }); });
+      roundsWrap.appendChild(addBtn);
+
+      row.appendChild(roundsWrap);
+      editRowsEl.appendChild(row);
+    });
+  }
+
+  function find(arr, id){ for (var i=0;i<arr.length;i++) if (arr[i].id===id) return arr[i]; return null; }
+  function mutate(fn){
+    var d = (state.draft||[]).map(function(p){ return Object.assign({}, p, { rounds: p.rounds.map(function(r){ return Object.assign({}, r); }) }); });
+    fn(d);
+    state.draft = d;
+    renderEditor();
+  }
+
+  // ---------- view switching ----------
+  function setView(v){
+    state.view = v;
+    var isDash = v==='dashboard';
+    document.getElementById('vs-dashboard').style.display = isDash ? '' : 'none';
+    document.getElementById('vs-editor').style.display = isDash ? 'none' : '';
+    document.getElementById('vs-actionbar').style.display = isDash ? 'none' : '';
+    document.getElementById('vs-open-editor').style.display = isDash ? '' : 'none';
+    document.getElementById('vs-back').style.display = isDash ? 'none' : '';
+    if (isDash) renderDashboard(); else renderEditor();
+  }
+
+  function openEditor(){ state.draft = JSON.parse(JSON.stringify(state.products)); setView('editor'); }
+  function cancel(){ state.draft = null; setView('dashboard'); }
+  function save(){
+    var p = state.draft || state.products;
+    persist(p);
+    state.products = p; state.draft = null;
+    setView('dashboard');
+    pushToSheet(p);
+    showToast('ບັນທຶກຂໍ້ມູນແລ້ວ', 2400);
+  }
+
+  function onOrdered(pid){
+    var p = find(state.products, pid);
+    if (!p) return;
+    var len = (p.rounds||[]).length;
+    if (len < 1) return;
+    var cur = Math.min(p.cur||0, len-1);
+    var next = (cur + 1) % len;
+    state.products = state.products.map(function(x){ return x.id===pid ? Object.assign({}, x, { cur:next }) : x; });
+    persist(state.products);
+    renderDashboard();
+    pushToSheet(state.products);
+    showToast('ສະແດງ ງວດທີ '+(next+1)+' ແລ້ວ', 2200);
+  }
+
+  // ---------- toast ----------
+  function showToast(msg, ms){
+    clearTimeout(toastTimer);
+    var existing = document.getElementById('vs-toast'); if (existing) existing.remove();
+    var t = el('div', { id:'vs-toast', class:'vs-toast' }, [
+      el('span', { class:'vs-toast-check', text:'✓' }),
+      msg
+    ]);
+    document.body.appendChild(t);
+    toastTimer = setTimeout(function(){ var n=document.getElementById('vs-toast'); if(n) n.remove(); }, ms);
+  }
+
+  // ---------- wire up ----------
+  document.getElementById('vs-open-editor').addEventListener('click', openEditor);
+  document.getElementById('vs-back').addEventListener('click', cancel);
+  document.getElementById('vs-cancel').addEventListener('click', cancel);
+  document.getElementById('vs-save').addEventListener('click', save);
+
+  var refreshBtn = document.getElementById('vs-refresh');
+  refreshBtn.addEventListener('click', function(){
+    refreshBtn.disabled = true;
+    syncFromSheet(function(){ refreshBtn.disabled = false; });
+  });
+
+  renderDashboard();
+
+  // ---- Google Sheet: show controls + pull latest on open ----
+  if (sheetEnabled()){
+    refreshBtn.style.display = '';
+    syncFromSheet();
+    // re-pull when the tab regains focus so each person sees others' changes
+    document.addEventListener('visibilitychange', function(){
+      if (!document.hidden && state.view==='dashboard') syncFromSheet();
+    });
+  } else {
+    setSyncStatus('local');
+  }
+})();
+</script>
+</body>
+</html>
