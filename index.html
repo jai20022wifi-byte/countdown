@@ -323,7 +323,7 @@
       predictedStr: active ? fmtISO(active.predicted) : '—',
       hasDue:hasDue, dueRounds:dueRounds, dueTotal:dueTotal,
       dueCountStr: hasDue ? ('ຍັງບໍ່ເກັບເງີນ ' + dueRounds + ' ງວດ') : 'ເກັບເງີນຄົບແລ້ວ',
-      dueAmtStr: hasDue ? (Math.round(dueTotal).toLocaleString('en-US') + ' ກີບ') : '',
+      dueAmtStr: hasDue ? (Math.round(dueTotal).toLocaleString('en-US') + ' USD') : '',
       orderBtnText:orderBtnText, orderBtnLast:orderBtnLast
     };
   }
@@ -496,7 +496,7 @@
         var dueInput = el('input', { class:'vs-due-input', inputmode:'decimal', placeholder:'0' }); dueInput.value = r.due||'';
         dueInput.addEventListener('change', function(){ var v=dueInput.value.replace(/[^0-9.]/g,''); mutate(function(d){ var x=find(d,p.id); if(x && x.rounds[idx]) x.rounds[idx].due=v; }); });
         dueField.appendChild(dueInput);
-        dueField.appendChild(el('span', { class:'vs-due-unit', text:'ກີບ' }));
+        dueField.appendChild(el('span', { class:'vs-due-unit', text:'USD' }));
         dueBox.appendChild(dueField);
         rc.appendChild(dueBox);
 
