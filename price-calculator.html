@@ -84,6 +84,13 @@
   }
   .title{ font-size:18px; font-weight:800; letter-spacing:-.01em; line-height:1.15; }
   .subtitle{ font-size:13px; color:var(--muted); font-weight:500; margin-top:1px; }
+  .btn-install{
+    flex-shrink:0; display:inline-flex; align-items:center; gap:6px;
+    padding:9px 13px; font-family:inherit; font-size:13px; font-weight:700;
+    color:var(--primary); background:var(--card-hi); border:1.5px solid var(--accent-border);
+    border-radius:10px; cursor:pointer; white-space:nowrap; transition:background .15s;
+  }
+  .btn-install:hover{ background:var(--card); }
 
   /* Tabs */
   .tabs{ display:flex; padding:0 12px; border-bottom:1px solid var(--border); }
@@ -213,10 +220,11 @@
     <!-- Header -->
     <div class="header">
       <div class="logo">฿</div>
-      <div style="min-width:0;">
+      <div style="min-width:0; flex:1;">
         <div class="title">เครื่องคำนวณราคา/หน่วย</div>
         <div class="subtitle">ถอดราคาต่อหน่วยและ VAT จากยอดรวม</div>
       </div>
+      <button id="btnInstall" class="btn-install hidden" type="button" title="ติดตั้งลงเครื่อง">⬇ ติดตั้งแอป</button>
     </div>
 
     <!-- Tabs -->
@@ -584,6 +592,31 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     navigator.serviceWorker.register('sw.js').catch(function(){ /* offline support unavailable — app still works online */ });
   });
 }
+
+// One-click "Install app" button — installs the app on the device.
+// After install it works fully offline (no internet needed).
+(function(){
+  var btn = document.getElementById('btnInstall');
+  if (!btn) return;
+  var deferred = null;
+  var standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+  window.addEventListener('beforeinstallprompt', function(e){
+    e.preventDefault();
+    deferred = e;
+    if (!standalone) btn.classList.remove('hidden');
+  });
+
+  btn.addEventListener('click', async function(){
+    if (!deferred) return;
+    deferred.prompt();
+    try { await deferred.userChoice; } catch(e){}
+    deferred = null;
+    btn.classList.add('hidden');
+  });
+
+  window.addEventListener('appinstalled', function(){ btn.classList.add('hidden'); });
+})();
 </script>
 </body>
 </html>

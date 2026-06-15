@@ -3,7 +3,7 @@
    Any request not in this app's shell is passed straight to the network,
    so it never interferes with other pages served from the same origin. */
 
-const CACHE = 'price-calc-v1';
+const CACHE = 'price-calc-v2';
 
 // App shell — the files the calculator needs to run offline.
 const SHELL = [
@@ -39,7 +39,24 @@ self.addEventListener('fetch', (event) => {
   // Only handle our own app shell and the web font; leave everything else alone.
   if (!isShell && !isFont) return;
 
-  // Cache-first, then network — and cache the font on first online load.
+  const isHTML = path === 'price-calculator.html' || req.mode === 'navigate';
+
+  if (isHTML) {
+    // Network-first for the page: always get the latest version when online,
+    // fall back to the cached copy when offline.
+    event.respondWith(
+      fetch(req).then((res) => {
+        if (res && res.status === 200) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put('price-calculator.html', copy));
+        }
+        return res;
+      }).catch(() => caches.match(req).then((c) => c || caches.match('price-calculator.html')))
+    );
+    return;
+  }
+
+  // Cache-first for static assets (icons, manifest, font) — and cache on first online load.
   event.respondWith(
     caches.match(req).then((cached) => {
       if (cached) return cached;
