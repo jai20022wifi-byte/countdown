@@ -1,0 +1,16 @@
+{
+  "name": "เครื่องคำนวณราคา/หน่วย",
+  "short_name": "คำนวณราคา",
+  "description": "ถอดราคาต่อหน่วยและ VAT จากยอดรวม",
+  "lang": "th",
+  "start_url": "price-calculator.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d1424",
+  "theme_color": "#1f2c54",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

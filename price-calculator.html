@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>เครื่องคำนวณราคา/หน่วย</title>
+
+<!-- PWA: installable, works offline, looks like a native app on mobile -->
+<meta name="theme-color" content="#1f2c54">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="คำนวณราคา">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  :root{
+    --bg: oklch(0.955 0.009 252);
+    --panel: oklch(0.995 0.003 252);
+    --card: oklch(0.978 0.006 252);
+    --card-hi: oklch(0.935 0.030 254);
+    --text: oklch(0.255 0.032 258);
+    --muted: oklch(0.515 0.026 258);
+    --faint: oklch(0.62 0.022 258);
+    --border: oklch(0.895 0.013 255);
+    --border-strong: oklch(0.84 0.02 255);
+    --primary: oklch(0.43 0.094 258);
+    --primary-strong: oklch(0.37 0.10 260);
+    --primary-fg: oklch(0.99 0.004 255);
+    --accent-border: oklch(0.74 0.066 256);
+    --danger: oklch(0.55 0.18 25);
+    --ring: color-mix(in oklch, var(--primary) 20%, transparent);
+    --shadow: 0 1px 2px rgba(22,38,66,.06), 0 10px 34px rgba(22,38,66,.07);
+    --shadow-sm: 0 1px 2px rgba(22,38,66,.05);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg: oklch(0.168 0.021 261);
+      --panel: oklch(0.205 0.022 261);
+      --card: oklch(0.238 0.022 261);
+      --card-hi: oklch(0.30 0.042 258);
+      --text: oklch(0.955 0.008 250);
+      --muted: oklch(0.70 0.022 255);
+      --faint: oklch(0.60 0.02 255);
+      --border: oklch(0.325 0.022 261);
+      --border-strong: oklch(0.40 0.028 261);
+      --primary: oklch(0.66 0.115 256);
+      --primary-strong: oklch(0.73 0.12 256);
+      --primary-fg: oklch(0.16 0.02 261);
+      --accent-border: oklch(0.48 0.075 256);
+      --ring: color-mix(in oklch, var(--primary) 28%, transparent);
+      --shadow: 0 1px 2px rgba(0,0,0,.45), 0 12px 44px rgba(0,0,0,.40);
+      --shadow-sm: 0 1px 2px rgba(0,0,0,.40);
+    }
+  }
+
+  body{
+    min-height:100vh; width:100%; background:var(--bg);
+    font-family:'Noto Sans Thai',system-ui,sans-serif; color:var(--text);
+    display:flex; flex-direction:column; align-items:center;
+    padding:calc(28px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(64px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .panel{
+    width:100%; max-width:600px; background:var(--panel);
+    border:1px solid var(--border); border-radius:20px;
+    box-shadow:var(--shadow); overflow:hidden;
+  }
+
+  /* Header */
+  .header{ display:flex; align-items:center; gap:13px; padding:22px 24px 18px; }
+  .logo{
+    width:42px; height:42px; border-radius:12px; background:var(--primary);
+    color:var(--primary-fg); display:flex; align-items:center; justify-content:center;
+    font-size:21px; font-weight:800; box-shadow:var(--shadow-sm); flex-shrink:0;
+  }
+  .title{ font-size:18px; font-weight:800; letter-spacing:-.01em; line-height:1.15; }
+  .subtitle{ font-size:13px; color:var(--muted); font-weight:500; margin-top:1px; }
+
+  /* Tabs */
+  .tabs{ display:flex; padding:0 12px; border-bottom:1px solid var(--border); }
+  .tab{
+    flex:1; text-align:center; padding:14px 0; font-size:15px; font-weight:600;
+    cursor:pointer; background:transparent; border:none;
+    border-bottom:2.5px solid transparent; color:var(--muted);
+    font-family:inherit; transition:color .15s; margin-bottom:-1px;
+  }
+  .tab.active{ color:var(--primary); font-weight:700; border-bottom-color:var(--primary); }
+  .badge{
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:19px; height:19px; padding:0 5px; margin-left:6px; border-radius:9px;
+    background:var(--card-hi); color:var(--primary); font-size:11.5px; font-weight:700;
+    vertical-align:middle;
+  }
+
+  /* Sections */
+  .section-label{
+    font-size:11.5px; font-weight:700; letter-spacing:.08em; color:var(--faint);
+    text-transform:uppercase;
+  }
+
+  .calc-body{ padding:22px 24px 26px; }
+  .grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:13px; }
+  .field-label{ display:block; font-size:13px; font-weight:600; color:var(--muted); margin-bottom:7px; }
+  .input{
+    width:100%; padding:13px 14px; font-size:17px; font-family:inherit; font-weight:600;
+    color:var(--text); background:var(--panel); border:1.5px solid var(--border-strong);
+    border-radius:11px; outline:none; font-variant-numeric:tabular-nums;
+  }
+  .input:focus{ border-color:var(--primary); box-shadow:0 0 0 3px var(--ring); }
+
+  .formula{
+    margin-top:18px; padding:12px 14px; background:var(--card); border:1px solid var(--border);
+    border-radius:11px; font-size:12.5px; line-height:1.7; color:var(--muted);
+  }
+  .formula b{ font-weight:700; color:var(--faint); }
+
+  .results-head{
+    display:flex; align-items:center; justify-content:space-between; margin:24px 0 13px;
+  }
+  .invalid-hint{ font-size:12px; color:var(--faint); font-weight:500; }
+
+  .results-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .result-card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:15px 16px; }
+  .result-card.hi{ background:var(--card-hi); border:1.5px solid var(--accent-border); }
+  .result-card .cap{ font-size:12.5px; font-weight:600; color:var(--muted); margin-bottom:8px; }
+  .result-card.hi .cap{ font-weight:700; color:var(--primary); display:flex; align-items:center; gap:5px; }
+  .result-card .val{ font-size:29px; font-weight:800; letter-spacing:-.015em; line-height:1.05; font-variant-numeric:tabular-nums; }
+  .result-card.hi .val{ color:var(--primary-strong); }
+  .result-card .unit{ font-size:11.5px; color:var(--faint); margin-top:4px; }
+  .result-card.hi .unit{ color:var(--primary); opacity:.75; }
+
+  .steps{ margin-top:18px; background:var(--card); border:1px solid var(--border); border-radius:14px; padding:17px 18px; }
+  .steps-title{
+    font-size:11.5px; font-weight:700; letter-spacing:.07em; color:var(--faint);
+    text-transform:uppercase; margin-bottom:11px;
+  }
+  .steps-list{ display:flex; flex-direction:column; gap:9px; font-variant-numeric:tabular-nums; font-size:14px; line-height:1.5; }
+  .derive-list{ color:var(--text); }
+  .verify-list{ color:var(--muted); }
+  .step-row{ display:flex; gap:10px; align-items:baseline; }
+  .step-n{ color:var(--primary); font-weight:700; font-size:12px; flex-shrink:0; }
+  .steps-divider{ height:1px; background:var(--border); margin:14px 0; }
+
+  .actions{ display:flex; gap:10px; margin-top:20px; }
+  .btn-clear{
+    padding:14px 18px; font-size:15px; font-family:inherit; font-weight:600;
+    color:var(--muted); background:transparent; border:1.5px solid var(--border-strong);
+    border-radius:12px; cursor:pointer; transition:color .15s, border-color .15s;
+  }
+  .btn-clear:hover{ color:var(--text); border-color:var(--text); }
+  .btn-save{
+    flex:1; padding:14px; font-size:16px; font-family:inherit; font-weight:700;
+    color:var(--primary-fg); background:var(--primary); border:none; border-radius:12px;
+    cursor:pointer; box-shadow:var(--shadow-sm); transition:background .15s;
+  }
+  .btn-save:hover{ background:var(--primary-strong); }
+  .btn-save:disabled{ opacity:.45; cursor:not-allowed; box-shadow:none; }
+
+  .saved-msg{ margin-top:13px; text-align:center; font-size:13.5px; font-weight:600; color:var(--primary); }
+
+  /* History */
+  .history-body{ padding:20px 20px 26px; }
+  .empty{ text-align:center; padding:54px 20px; }
+  .empty-icon{
+    width:56px; height:56px; border-radius:16px; background:var(--card);
+    border:1px solid var(--border); display:flex; align-items:center; justify-content:center;
+    margin:0 auto 16px; font-size:24px;
+  }
+  .empty-title{ font-size:16px; font-weight:700; color:var(--text); }
+  .empty-sub{ font-size:13.5px; color:var(--muted); margin-top:6px; line-height:1.6; }
+
+  .hist-list{ display:flex; flex-direction:column; gap:12px; }
+  .hist-card{ background:var(--card); border:1px solid var(--border); border-radius:15px; padding:16px 17px; }
+  .hist-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+  .hist-ts{ font-size:12px; color:var(--faint); font-weight:500; }
+  .hist-del{
+    flex-shrink:0; width:28px; height:28px; border-radius:8px; border:1px solid var(--border);
+    background:transparent; color:var(--faint); cursor:pointer; font-size:14px; line-height:1;
+    display:flex; align-items:center; justify-content:center; transition:color .15s, border-color .15s;
+  }
+  .hist-del:hover{ color:var(--danger); border-color:var(--danger); }
+  .hist-main{ display:flex; align-items:baseline; gap:8px; margin-top:10px; }
+  .hist-perunit{ font-size:26px; font-weight:800; letter-spacing:-.015em; font-variant-numeric:tabular-nums; color:var(--text); }
+  .hist-perunit-unit{ font-size:12.5px; color:var(--muted); font-weight:600; }
+  .hist-meta{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:13px; padding:11px 0 0; border-top:1px solid var(--border); }
+  .hist-meta .k{ font-size:11px; color:var(--faint); margin-bottom:3px; }
+  .hist-meta .v{ font-size:13.5px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .btn-again{
+    width:100%; margin-top:14px; padding:11px; font-size:14px; font-family:inherit; font-weight:700;
+    color:var(--primary); background:transparent; border:1.5px solid var(--accent-border);
+    border-radius:11px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:7px;
+    transition:background .15s;
+  }
+  .btn-again:hover{ background:var(--card-hi); }
+
+  .footer{ font-size:11.5px; color:var(--faint); margin-top:18px; text-align:center; }
+  .hidden{ display:none !important; }
+</style>
+</head>
+<body>
+
+  <div class="panel">
+
+    <!-- Header -->
+    <div class="header">
+      <div class="logo">฿</div>
+      <div style="min-width:0;">
+        <div class="title">เครื่องคำนวณราคา/หน่วย</div>
+        <div class="subtitle">ถอดราคาต่อหน่วยและ VAT จากยอดรวม</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button id="tabCalc" class="tab active" type="button">คำนวณ</button>
+      <button id="tabHistory" class="tab" type="button">
+        ประวัติ<span id="histBadge" class="badge hidden">0</span>
+      </button>
+    </div>
+
+    <!-- ===== CALC TAB ===== -->
+    <div id="calcPanel" class="calc-body">
+
+      <div class="section-label" style="margin-bottom:13px;">กรอกข้อมูล</div>
+
+      <div class="grid-2">
+        <div>
+          <label class="field-label" for="qty">จำนวน (ton)</label>
+          <input id="qty" class="input" inputmode="decimal" placeholder="0" />
+        </div>
+        <div>
+          <label class="field-label" for="vat">VAT (%)</label>
+          <input id="vat" class="input" inputmode="decimal" placeholder="0" />
+        </div>
+      </div>
+
+      <div style="margin-top:13px;">
+        <label class="field-label" for="total">ราคารวม + VAT (ยอดสุดท้าย)</label>
+        <input id="total" class="input" inputmode="decimal" placeholder="0.00" />
+      </div>
+
+      <!-- Formula hint -->
+      <div class="formula">
+        <b>สูตร&nbsp;&nbsp;</b>ยอดสุดท้าย ÷ (1 + VAT%) = ยอดก่อน VAT&nbsp;&nbsp;→&nbsp;&nbsp;ยอดก่อน VAT ÷ จำนวน = ราคา/หน่วย
+      </div>
+
+      <!-- Results -->
+      <div class="results-head">
+        <div class="section-label">ผลลัพธ์</div>
+        <div id="invalidHint" class="invalid-hint hidden">กรอกค่าให้ครบเพื่อคำนวณ</div>
+      </div>
+
+      <div class="results-grid">
+        <div class="result-card">
+          <div class="cap">ราคา/หน่วย</div>
+          <div class="val" id="perUnitD">—</div>
+          <div class="unit">บาท / ton</div>
+        </div>
+        <div class="result-card">
+          <div class="cap">ราคารวม (ก่อน VAT)</div>
+          <div class="val" id="preVatD">—</div>
+          <div class="unit">บาท</div>
+        </div>
+        <div class="result-card">
+          <div class="cap">VAT</div>
+          <div class="val" id="vatAmountD">—</div>
+          <div class="unit">บาท</div>
+        </div>
+        <div class="result-card hi">
+          <div class="cap">รวม + VAT <span style="font-size:12px;">✓</span></div>
+          <div class="val" id="grandD">—</div>
+          <div class="unit">บาท (ยอดสุดท้าย)</div>
+        </div>
+      </div>
+
+      <!-- Steps -->
+      <div id="stepsBlock" class="steps hidden">
+        <div class="steps-title">ขั้นตอนการถอดราคา</div>
+        <div id="deriveList" class="steps-list derive-list"></div>
+        <div class="steps-divider"></div>
+        <div class="steps-title">ตรวจสอบย้อนกลับ</div>
+        <div id="verifyList" class="steps-list verify-list"></div>
+      </div>
+
+      <!-- Actions -->
+      <div class="actions">
+        <button id="btnClear" class="btn-clear" type="button">ล้างค่า</button>
+        <button id="btnSave" class="btn-save" type="button">บันทึกการคำนวณ</button>
+      </div>
+
+      <div id="savedMsg" class="saved-msg hidden">✓ บันทึกลงประวัติแล้ว</div>
+
+    </div>
+
+    <!-- ===== HISTORY TAB ===== -->
+    <div id="historyPanel" class="history-body hidden"></div>
+
+  </div>
+
+  <div class="footer">รองรับโหมดมืดอัตโนมัติ · เก็บประวัติในเครื่อง</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var STORAGE_KEY = 'priceCalcHistory_v1';
+  var DASH = '—';
+  var monthsTH = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+
+  var state = {
+    tab: 'calc',
+    qty: '85.1',
+    vat: '10',
+    total: '32423.14',
+    history: [],
+    justSaved: false,
+  };
+  var savedTimer = null;
+
+  // ---- elements ----
+  var el = {
+    tabCalc: document.getElementById('tabCalc'),
+    tabHistory: document.getElementById('tabHistory'),
+    histBadge: document.getElementById('histBadge'),
+    calcPanel: document.getElementById('calcPanel'),
+    historyPanel: document.getElementById('historyPanel'),
+    qty: document.getElementById('qty'),
+    vat: document.getElementById('vat'),
+    total: document.getElementById('total'),
+    invalidHint: document.getElementById('invalidHint'),
+    perUnitD: document.getElementById('perUnitD'),
+    preVatD: document.getElementById('preVatD'),
+    vatAmountD: document.getElementById('vatAmountD'),
+    grandD: document.getElementById('grandD'),
+    stepsBlock: document.getElementById('stepsBlock'),
+    deriveList: document.getElementById('deriveList'),
+    verifyList: document.getElementById('verifyList'),
+    btnClear: document.getElementById('btnClear'),
+    btnSave: document.getElementById('btnSave'),
+    savedMsg: document.getElementById('savedMsg'),
+  };
+
+  // ---- helpers ----
+  function fmt(n){
+    return isFinite(n)
+      ? Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : DASH;
+  }
+
+  function dlabel(ts){
+    var d = new Date(ts);
+    var hh = String(d.getHours()).padStart(2,'0');
+    var mm = String(d.getMinutes()).padStart(2,'0');
+    return d.getDate() + ' ' + monthsTH[d.getMonth()] + ' ' + d.getFullYear() + ' · ' + hh + ':' + mm + ' น.';
+  }
+
+  function persist(h){
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(h)); } catch(e){}
+  }
+
+  function load(){
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) state.history = JSON.parse(raw) || [];
+    } catch(e){ state.history = []; }
+  }
+
+  function compute(){
+    var qty = parseFloat(state.qty);
+    var vat = parseFloat(state.vat);
+    var total = parseFloat(state.total);
+    var valid = isFinite(qty) && qty > 0 && isFinite(total) && total > 0 && isFinite(vat) && vat >= 0;
+
+    var perUnit = 0, preVat = 0, vatAmount = 0, grand = total;
+    if (valid){
+      preVat = total / (1 + vat / 100);
+      vatAmount = total - preVat;
+      perUnit = preVat / qty;
+      grand = total;
+    }
+    return { qty:qty, vat:vat, total:total, valid:valid, perUnit:perUnit, preVat:preVat, vatAmount:vatAmount, grand:grand };
+  }
+
+  function toggle(node, show){ node.classList[show ? 'remove' : 'add']('hidden'); }
+
+  // ---- rendering ----
+  function renderCalc(){
+    var c = compute();
+
+    el.perUnitD.textContent  = c.valid ? fmt(c.perUnit)   : DASH;
+    el.preVatD.textContent   = c.valid ? fmt(c.preVat)    : DASH;
+    el.vatAmountD.textContent= c.valid ? fmt(c.vatAmount) : DASH;
+    el.grandD.textContent    = c.valid ? fmt(c.grand)     : DASH;
+
+    toggle(el.invalidHint, !c.valid);
+
+    // steps
+    if (c.valid){
+      var div = (1 + c.vat / 100).toFixed(2);
+      var vatStr = String(c.vat);
+      el.deriveList.innerHTML =
+        stepRow('1', 'ยอดก่อน VAT = ' + fmt(c.total) + ' ÷ ' + div + ' = ' + fmt(c.preVat)) +
+        stepRow('2', 'ราคา/หน่วย = ' + fmt(c.preVat) + ' ÷ ' + fmt(c.qty) + ' = ' + fmt(c.perUnit));
+      el.verifyList.innerHTML =
+        verifyRow(fmt(c.qty) + ' × ' + fmt(c.perUnit) + ' = ' + fmt(c.preVat)) +
+        verifyRow(fmt(c.preVat) + ' × ' + vatStr + '% = ' + fmt(c.vatAmount)) +
+        verifyRow(fmt(c.preVat) + ' + ' + fmt(c.vatAmount) + ' = ' + fmt(c.grand) + '  ✓');
+    }
+    toggle(el.stepsBlock, c.valid);
+
+    // save button
+    el.btnSave.disabled = !c.valid;
+
+    // badge
+    var count = state.history.length;
+    el.histBadge.textContent = String(count);
+    toggle(el.histBadge, count > 0);
+  }
+
+  function stepRow(n, t){
+    return '<div class="step-row"><span class="step-n">' + esc(n) + '</span><span>' + esc(t) + '</span></div>';
+  }
+  function verifyRow(t){
+    return '<div>' + esc(t) + '</div>';
+  }
+
+  function renderHistory(){
+    if (state.history.length === 0){
+      el.historyPanel.innerHTML =
+        '<div class="empty">' +
+          '<div class="empty-icon">🗂️</div>' +
+          '<div class="empty-title">ยังไม่มีประวัติการคำนวณ</div>' +
+          '<div class="empty-sub">คำนวณแล้วกด “บันทึกการคำนวณ”<br/>รายการจะถูกเก็บไว้ที่นี่</div>' +
+        '</div>';
+      return;
+    }
+
+    var html = '<div class="hist-list">';
+    state.history.forEach(function(it){
+      html +=
+        '<div class="hist-card" data-id="' + esc(it.id) + '">' +
+          '<div class="hist-top">' +
+            '<div class="hist-ts">' + esc(dlabel(it.ts)) + '</div>' +
+            '<button class="hist-del" data-act="del" title="ลบ">✕</button>' +
+          '</div>' +
+          '<div class="hist-main">' +
+            '<div class="hist-perunit">' + esc(fmt(it.perUnit)) + '</div>' +
+            '<div class="hist-perunit-unit">บาท / ton</div>' +
+          '</div>' +
+          '<div class="hist-meta">' +
+            '<div><div class="k">จำนวน</div><div class="v">' + esc(fmt(parseFloat(it.qty))) + '</div></div>' +
+            '<div><div class="k">VAT</div><div class="v">' + esc(String(parseFloat(it.vat))) + '%</div></div>' +
+            '<div><div class="k">ยอดรวม</div><div class="v">' + esc(fmt(parseFloat(it.total))) + '</div></div>' +
+          '</div>' +
+          '<button class="btn-again" data-act="again">↺ ใช้ค่านี้อีกครั้ง</button>' +
+        '</div>';
+    });
+    html += '</div>';
+    el.historyPanel.innerHTML = html;
+  }
+
+  function esc(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+    });
+  }
+
+  function renderTabs(){
+    var isCalc = state.tab === 'calc';
+    el.tabCalc.classList.toggle('active', isCalc);
+    el.tabHistory.classList.toggle('active', !isCalc);
+    toggle(el.calcPanel, isCalc);
+    toggle(el.historyPanel, !isCalc);
+    if (!isCalc) renderHistory();
+  }
+
+  // ---- actions ----
+  function sanitize(v){ return v.replace(/[^0-9.]/g, ''); }
+
+  function onField(key, node){
+    var v = sanitize(node.value);
+    if (v !== node.value) node.value = v;
+    state[key] = v;
+    state.justSaved = false;
+    toggle(el.savedMsg, false);
+    renderCalc();
+  }
+
+  function save(){
+    var c = compute();
+    if (!c.valid) return;
+    var item = {
+      id: Date.now() + Math.random(),
+      ts: Date.now(),
+      qty: state.qty, vat: state.vat, total: state.total,
+      perUnit: c.perUnit, preVat: c.preVat, vatAmount: c.vatAmount, grand: c.grand,
+    };
+    state.history = [item].concat(state.history).slice(0, 50);
+    persist(state.history);
+    state.justSaved = true;
+    toggle(el.savedMsg, true);
+    renderCalc();
+    clearTimeout(savedTimer);
+    savedTimer = setTimeout(function(){
+      state.justSaved = false;
+      toggle(el.savedMsg, false);
+    }, 2000);
+  }
+
+  function clearInputs(){
+    state.qty = ''; state.vat = ''; state.total = '';
+    state.justSaved = false;
+    el.qty.value = ''; el.vat.value = ''; el.total.value = '';
+    toggle(el.savedMsg, false);
+    renderCalc();
+  }
+
+  function delItem(id){
+    state.history = state.history.filter(function(x){ return String(x.id) !== String(id); });
+    persist(state.history);
+    renderHistory();
+    renderCalc();
+  }
+
+  function useAgain(it){
+    state.qty = String(it.qty);
+    state.vat = String(it.vat);
+    state.total = String(it.total);
+    state.justSaved = false;
+    state.tab = 'calc';
+    el.qty.value = state.qty;
+    el.vat.value = state.vat;
+    el.total.value = state.total;
+    toggle(el.savedMsg, false);
+    renderTabs();
+    renderCalc();
+  }
+
+  // ---- wiring ----
+  el.qty.addEventListener('input', function(){ onField('qty', el.qty); });
+  el.vat.addEventListener('input', function(){ onField('vat', el.vat); });
+  el.total.addEventListener('input', function(){ onField('total', el.total); });
+  el.btnClear.addEventListener('click', clearInputs);
+  el.btnSave.addEventListener('click', save);
+  el.tabCalc.addEventListener('click', function(){ state.tab = 'calc'; renderTabs(); });
+  el.tabHistory.addEventListener('click', function(){ state.tab = 'history'; renderTabs(); });
+
+  el.historyPanel.addEventListener('click', function(e){
+    var btn = e.target.closest('[data-act]');
+    if (!btn) return;
+    var card = btn.closest('.hist-card');
+    if (!card) return;
+    var id = card.getAttribute('data-id');
+    var it = state.history.filter(function(x){ return String(x.id) === String(id); })[0];
+    if (!it) return;
+    if (btn.getAttribute('data-act') === 'del') delItem(id);
+    else if (btn.getAttribute('data-act') === 'again') useAgain(it);
+  });
+
+  // ---- init ----
+  load();
+  el.qty.value = state.qty;
+  el.vat.value = state.vat;
+  el.total.value = state.total;
+  renderTabs();
+  renderCalc();
+})();
+</script>
+
+<script>
+// Register the service worker so the app works offline once loaded.
+// Only runs when served over http/https (skipped when opened as a local file).
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('sw.js').catch(function(){ /* offline support unavailable — app still works online */ });
+  });
+}
+</script>
+</body>
+</html>
