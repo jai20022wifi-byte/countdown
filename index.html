@@ -204,7 +204,7 @@
     return (arr||[]).map(function(p){
       return {
         id: String(p.id||''), nameLo: p.nameLo||'', nameEn: p.nameEn||'', cur: Number(p.cur)||0,
-        rounds: (p.rounds||[]).map(function(r){ return { ordered:r.ordered||'', predicted:r.predicted||'', due:(r.due==null?'':String(r.due)) }; })
+        rounds: (p.rounds||[]).map(function(r){ return { ordered:r.ordered||'', predicted:r.predicted||'', po:r.po||'', delivery:r.delivery||'', due:(r.due==null?'':String(r.due)) }; })
       };
     });
   }
@@ -321,6 +321,8 @@
       roundLabel: total ? ((cur+1)+'/'+total) : '0/0',
       orderedStr: active ? fmtISO(active.ordered) : '—',
       predictedStr: active ? fmtISO(active.predicted) : '—',
+      poStr: active ? fmtISO(active.po) : '—',
+      deliveryStr: active ? fmtISO(active.delivery) : '—',
       hasDue:hasDue, dueRounds:dueRounds, dueTotal:dueTotal,
       dueCountStr: hasDue ? ('ຍັງບໍ່ເກັບເງີນ ' + dueRounds + ' ງວດ') : 'ເກັບເງີນຄົບແລ້ວ',
       dueAmtStr: hasDue ? (Math.round(dueTotal).toLocaleString('en-US') + ' USD') : '',
@@ -382,13 +384,23 @@
 
       // ordered date row
       wrap.appendChild(el('div', { style:'display:flex;align-items:center;justify-content:space-between' }, [
-        el('span', { style:'font-size:12.5px;color:oklch(0.55 0.015 255)', text:'ສັ່ງລ່າສຸດ (ເລີ່ມ)' }),
+        el('span', { style:'font-size:12.5px;color:oklch(0.55 0.015 255)', text:'ສົ່ງໃຫ້ ນປປ ລ່າສຸດ' }),
         el('span', { style:"font-family:'Manrope',sans-serif;font-weight:600;font-size:14px;color:oklch(0.34 0.02 255)", text:card.orderedStr })
       ]));
       // predicted date row
       wrap.appendChild(el('div', { style:'display:flex;align-items:center;justify-content:space-between' }, [
         el('span', { style:'font-size:12.5px;color:oklch(0.55 0.015 255)', text:'ວັນຄາດການສັ່ງຊື້' }),
         el('span', { style:"font-family:'Manrope','Noto Sans Lao',sans-serif;font-weight:700;font-size:14px;color:"+c, text:card.predictedStr })
+      ]));
+      // PO date row
+      wrap.appendChild(el('div', { style:'display:flex;align-items:center;justify-content:space-between' }, [
+        el('span', { style:'font-size:12.5px;color:oklch(0.55 0.015 255)', text:'PO' }),
+        el('span', { style:"font-family:'Manrope',sans-serif;font-weight:600;font-size:14px;color:oklch(0.34 0.02 255)", text:card.poStr })
+      ]));
+      // delivery appointment date row
+      wrap.appendChild(el('div', { style:'display:flex;align-items:center;justify-content:space-between' }, [
+        el('span', { style:'font-size:12.5px;color:oklch(0.55 0.015 255)', text:'ວັນນັດສົ່ງ' }),
+        el('span', { style:"font-family:'Manrope',sans-serif;font-weight:600;font-size:14px;color:oklch(0.34 0.02 255)", text:card.deliveryStr })
       ]));
 
       // due / collection row
@@ -500,23 +512,25 @@
         dueBox.appendChild(dueField);
         rc.appendChild(dueBox);
 
-        // ordered date
-        var od = el('div'); od.appendChild(el('label', { class:'vs-field-label', text:'ສັ່ງລ່າສຸດ' }));
-        var odIn = el('input', { class:'vs-date-input', type:'date' }); odIn.value = r.ordered||'';
-        odIn.addEventListener('change', function(){ var v=odIn.value; mutate(function(d){ var x=find(d,p.id); if(x && x.rounds[idx]) x.rounds[idx].ordered=v; }); });
-        od.appendChild(odIn); rc.appendChild(od);
+        // date field helper
+        function dateField(labelText, field){
+          var wrap = el('div');
+          wrap.appendChild(el('label', { class:'vs-field-label', text:labelText }));
+          var inp = el('input', { class:'vs-date-input', type:'date' }); inp.value = r[field]||'';
+          inp.addEventListener('change', function(){ var v=inp.value; mutate(function(d){ var x=find(d,p.id); if(x && x.rounds[idx]) x.rounds[idx][field]=v; }); });
+          wrap.appendChild(inp); rc.appendChild(wrap);
+        }
 
-        // predicted date
-        var pd = el('div'); pd.appendChild(el('label', { class:'vs-field-label', text:'ຄາດການສັ່ງຊື້' }));
-        var pdIn = el('input', { class:'vs-date-input', type:'date' }); pdIn.value = r.predicted||'';
-        pdIn.addEventListener('change', function(){ var v=pdIn.value; mutate(function(d){ var x=find(d,p.id); if(x && x.rounds[idx]) x.rounds[idx].predicted=v; }); });
-        pd.appendChild(pdIn); rc.appendChild(pd);
+        dateField('ສົ່ງໃຫ້ ນປປ ລ່າສຸດ', 'ordered');   // (was ສັ່ງລ່າສຸດ)
+        dateField('ຄາດການສັ່ງຊື້', 'predicted');
+        dateField('PO', 'po');
+        dateField('ວັນນັດສົ່ງ', 'delivery');
 
         roundsWrap.appendChild(rc);
       });
 
       var addBtn = el('button', { class:'vs-add-round', text:'+ ເພີ່ມງວດ' });
-      addBtn.addEventListener('click', function(){ mutate(function(d){ var x=find(d,p.id); if(x) x.rounds.push({ordered:'', predicted:'', due:''}); }); });
+      addBtn.addEventListener('click', function(){ mutate(function(d){ var x=find(d,p.id); if(x) x.rounds.push({ordered:'', predicted:'', po:'', delivery:'', due:''}); }); });
       roundsWrap.appendChild(addBtn);
 
       row.appendChild(roundsWrap);
