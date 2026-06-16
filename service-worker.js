@@ -1,3 +1,6 @@
+// OneSignal Web Push (adds push handling to this worker)
+importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
+
 // Service worker — installable PWA + offline cache.
 // Same-origin: network-first (so GitHub updates show), fall back to cache offline.
 // Cross-origin (Google Apps Script data, Google Fonts): pass straight through.

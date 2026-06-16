@@ -12,6 +12,19 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="ນັບຖອຍຫຼັງ">
+<!-- OneSignal Web Push -->
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<script>
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  OneSignalDeferred.push(async function(OneSignal) {
+    await OneSignal.init({
+      appId: "32eaeedd-eb82-44fa-8859-1c7ffde211a5",
+      serviceWorkerPath: "/countdown/service-worker.js",
+      serviceWorkerParam: { scope: "/countdown/" },
+      allowLocalhostAsSecureOrigin: true
+    });
+  });
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+Lao:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -137,6 +150,7 @@
           <div id="vs-date" class="vs-date"></div>
           <div id="vs-clock" class="vs-clock"></div>
         </div>
+        <button id="vs-notify" class="vs-btn-ghost" title="ເປີດການແຈ້ງເຕືອນ" style="display:none;align-items:center;gap:7px">🔔 ເປີດແຈ້ງເຕືອນ</button>
         <button id="vs-fs" class="vs-btn-ghost" title="ເຕັມຈໍ" style="display:inline-flex;align-items:center;gap:7px"></button>
         <button id="vs-open-editor" class="vs-btn-primary">ແກ້ໄຂຂໍ້ມູນ</button>
         <button id="vs-back" class="vs-btn-ghost" style="display:none">← ກັບໄປໜ້າຫຼັກ</button>
@@ -637,6 +651,24 @@
       navigator.serviceWorker.register('service-worker.js').catch(function(){});
     });
   }
+
+  // ---- Web Push subscribe button (OneSignal) ----
+  (function(){
+    var nbtn = document.getElementById('vs-notify');
+    if (!nbtn || !('Notification' in window)) return;
+    function granted(){ return typeof Notification !== 'undefined' && Notification.permission === 'granted'; }
+    function refresh(){ nbtn.style.display = granted() ? 'none' : 'inline-flex'; }
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    window.OneSignalDeferred.push(function(OneSignal){
+      nbtn.addEventListener('click', function(){
+        try { OneSignal.Notifications.requestPermission(); } catch(e){}
+        try { OneSignal.User.PushSubscription.optIn(); } catch(e){}
+      });
+      try { OneSignal.Notifications.addEventListener('permissionChange', refresh); } catch(e){}
+      refresh();
+    });
+    refresh();
+  })();
 
   renderDashboard();
 
