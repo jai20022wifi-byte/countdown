@@ -183,7 +183,7 @@
     { id:'p1', nameLo:'ນ້ຳກົດ 98%', nameEn:'Sulfuric Acid 98%', cur:0, rounds:[{ordered:'2026-05-20', predicted:'2026-06-20', due:'12500000'},{ordered:'2026-07-20', predicted:'2026-08-20', due:'7000000'}] },
     { id:'p2', nameLo:'ແປ້ງອາລູມິນຽມ 64%', nameEn:'Aluminium Hydroxide 64%', cur:0, rounds:[{ordered:'2026-04-15', predicted:'2026-06-30', due:'0'},{ordered:'2026-08-15', predicted:'2026-09-30', due:''}] },
     { id:'p3', nameLo:'ຍາຂ້າເຊື້ອໂລກນ້ຳ 65%', nameEn:'Calcium Hypochlorite 65%', cur:0, rounds:[{ordered:'2026-06-10', predicted:'2026-06-13', due:'8400000'},{ordered:'2026-08-10', predicted:'2026-08-13', due:''}] },
-    { id:'p4', nameLo:'ແຟັກ', nameEn:'Poly Aluminium Chloride', cur:0, rounds:[{ordered:'2026-03-12', predicted:'2026-06-25', due:'0'},{ordered:'2026-07-12', predicted:'2026-08-25', due:''}] }
+    { id:'p4', nameLo:'ແຟັກ 30%', nameEn:'Poly Aluminium Chloride', cur:0, rounds:[{ordered:'2026-03-12', predicted:'2026-06-25', due:'0'},{ordered:'2026-07-12', predicted:'2026-08-25', due:''}] }
   ];
 
   var state = { view:'dashboard', products:load(), draft:null, toast:'' };
@@ -394,7 +394,7 @@
       ]));
       // PO date row
       wrap.appendChild(el('div', { style:'display:flex;align-items:center;justify-content:space-between' }, [
-        el('span', { style:'font-size:12.5px;color:oklch(0.55 0.015 255)', text:'PO' }),
+        el('span', { style:'font-size:12.5px;color:oklch(0.55 0.015 255)', text:'ວັນ PO ອອກ' }),
         el('span', { style:"font-family:'Manrope',sans-serif;font-weight:600;font-size:14px;color:oklch(0.34 0.02 255)", text:card.poStr })
       ]));
       // delivery appointment date row
@@ -523,7 +523,7 @@
 
         dateField('ສົ່ງໃຫ້ ນປປ ລ່າສຸດ', 'ordered');   // (was ສັ່ງລ່າສຸດ)
         dateField('ຄາດການສັ່ງຊື້', 'predicted');
-        dateField('PO', 'po');
+        dateField('ວັນ PO ອອກ', 'po');
         dateField('ວັນນັດສົ່ງ', 'delivery');
 
         roundsWrap.appendChild(rc);
