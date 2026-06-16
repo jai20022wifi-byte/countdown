@@ -1,0 +1,15 @@
+{
+  "name": "ນັບຖອຍຫຼັງ ການສັ່ງຊື້ · Vientiane Supplies",
+  "short_name": "ນັບຖອຍຫຼັງ",
+  "description": "ນັບຖອຍຫຼັງ ການສັ່ງຊື້ສິນຄ້າ — Vientiane Supplies",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eef2f8",
+  "theme_color": "#3b6fd4",
+  "lang": "lo",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
