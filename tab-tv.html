@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tab TV — จอติดตามงาน</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f1720;
+    --bar: #1b2632;
+    --bar2: #243341;
+    --accent: #2dd4bf;
+    --accent2: #14b8a6;
+    --text: #e6edf3;
+    --muted: #8b9bab;
+    --danger: #ef4444;
+  }
+  html, body { height: 100%; }
+  body {
+    font-family: "Segoe UI", "Leelawadee UI", Tahoma, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ===== Tab bar ===== */
+  #tabbar {
+    display: flex;
+    align-items: center;
+    background: var(--bar);
+    border-bottom: 2px solid #000;
+    min-height: 46px;
+    padding: 0 6px;
+    gap: 4px;
+    overflow-x: auto;
+    flex-shrink: 0;
+  }
+  #tabbar::-webkit-scrollbar { height: 6px; }
+  #tabbar::-webkit-scrollbar-thumb { background: #3a4a5a; border-radius: 3px; }
+
+  .tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: var(--bar2);
+    border-radius: 8px 8px 0 0;
+    cursor: pointer;
+    white-space: nowrap;
+    font-size: 14px;
+    color: var(--muted);
+    border: 1px solid transparent;
+    border-bottom: none;
+    user-select: none;
+    transition: background .15s, color .15s;
+    position: relative;
+  }
+  .tab:hover { background: #2c3e4f; color: var(--text); }
+  .tab.active {
+    background: var(--bg);
+    color: var(--accent);
+    border-color: #000;
+    font-weight: 600;
+  }
+  .tab .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #4b5b6b; flex-shrink: 0;
+  }
+  .tab.active .dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+
+  .toolbtn {
+    background: var(--bar2);
+    color: var(--text);
+    border: none;
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .toolbtn:hover { background: var(--accent2); }
+  #spacer { flex: 1; }
+
+  /* progress bar of current tab timer */
+  #progwrap { height: 3px; background: #000; flex-shrink: 0; }
+  #prog { height: 100%; width: 0%; background: var(--accent); transition: width .25s linear; }
+
+  /* ===== Frames area ===== */
+  #frames { flex: 1; position: relative; background: #000; }
+  #frames iframe {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    border: none; background: #fff;
+    display: none;
+  }
+  #frames iframe.active { display: block; }
+
+  /* immersive (idle) mode — hide chrome, looks fullscreen */
+  body.immersive { cursor: none; }
+  body.immersive #tabbar,
+  body.immersive #progwrap { display: none; }
+
+  #empty {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: var(--muted); gap: 16px; text-align: center;
+  }
+  #empty h2 { color: var(--text); font-weight: 600; }
+
+  /* ===== Settings panel ===== */
+  #overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.6);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 100; padding: 20px;
+  }
+  #overlay.open { display: flex; }
+  #panel {
+    background: var(--bar);
+    border-radius: 14px;
+    width: 100%; max-width: 640px;
+    max-height: 88vh; overflow-y: auto;
+    padding: 22px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  }
+  #panel h2 { margin-bottom: 4px; font-size: 20px; }
+  #panel .sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+
+  .global {
+    background: var(--bar2); border-radius: 10px;
+    padding: 14px; margin-bottom: 18px;
+    display: flex; flex-wrap: wrap; gap: 18px;
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 12px; color: var(--muted); }
+  .field input[type=number], .field input[type=text] {
+    background: var(--bg); color: var(--text);
+    border: 1px solid #33475a; border-radius: 8px;
+    padding: 8px 10px; font-size: 14px;
+  }
+  .switch { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+
+  .tabrow {
+    display: grid;
+    grid-template-columns: 1fr 1.6fr 70px auto;
+    gap: 8px; align-items: center;
+    background: var(--bar2);
+    padding: 10px; border-radius: 10px; margin-bottom: 8px;
+  }
+  .tabrow input {
+    background: var(--bg); color: var(--text);
+    border: 1px solid #33475a; border-radius: 7px;
+    padding: 7px 9px; font-size: 13px; width: 100%;
+  }
+  .tabrow .del {
+    background: var(--danger); color: #fff; border: none;
+    border-radius: 7px; padding: 7px 10px; cursor: pointer; font-size: 14px;
+  }
+  .rowhead {
+    display: grid;
+    grid-template-columns: 1fr 1.6fr 70px auto;
+    gap: 8px; font-size: 11px; color: var(--muted);
+    padding: 0 10px 4px; text-transform: uppercase; letter-spacing: .5px;
+  }
+
+  .actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  .btn {
+    border: none; border-radius: 9px; padding: 11px 18px;
+    font-size: 14px; cursor: pointer; font-weight: 600;
+  }
+  .btn.primary { background: var(--accent); color: #042f2a; }
+  .btn.primary:hover { background: var(--accent2); }
+  .btn.ghost { background: var(--bar2); color: var(--text); }
+  .btn.ghost:hover { background: #2c3e4f; }
+
+  .note {
+    font-size: 12px; color: var(--muted);
+    margin-top: 14px; line-height: 1.6;
+    border-top: 1px solid #2a3a4a; padding-top: 12px;
+  }
+  kbd {
+    background: var(--bar2); border-radius: 4px; padding: 1px 6px;
+    border: 1px solid #33475a; font-size: 11px;
+  }
+</style>
+</head>
+<body>
+
+  <div id="tabbar">
+    <!-- tabs injected here -->
+    <div id="spacer"></div>
+    <button class="toolbtn" id="btnPlay"  title="เล่น/หยุด สลับอัตโนมัติ">⏸️</button>
+    <button class="toolbtn" id="btnReload" title="โหลด Tab นี้ใหม่">🔄</button>
+    <button class="toolbtn" id="btnFull"   title="เต็มจอ (TV)">⛶</button>
+    <button class="toolbtn" id="btnSettings" title="ตั้งค่า">⚙️</button>
+  </div>
+  <div id="progwrap"><div id="prog"></div></div>
+
+  <div id="frames">
+    <div id="empty">
+      <h2>ยังไม่มี Tab</h2>
+      <p>กดปุ่ม ⚙️ ตั้งค่า เพื่อเพิ่มเว็บของคุณ</p>
+      <button class="btn primary" onclick="openSettings()">➕ เพิ่มเว็บแรก</button>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div id="overlay">
+    <div id="panel">
+      <h2>⚙️ ตั้งค่า Tab TV</h2>
+      <div class="sub">เพิ่ม/แก้/ลบเว็บได้เอง — บันทึกอัตโนมัติในเครื่องนี้</div>
+
+      <div class="global">
+        <div class="field">
+          <label>เวลาเริ่มต้นต่อ Tab (วินาที)</label>
+          <input type="number" id="defDur" min="3" max="3600" step="1">
+        </div>
+        <div class="field">
+          <label>ความเร็ว Auto-scroll (px ต่อครั้ง)</label>
+          <input type="number" id="scrollSpeed" min="0" max="50" step="1">
+        </div>
+        <div class="field" style="justify-content:flex-end">
+          <label class="switch">
+            <input type="checkbox" id="scrollOn"> เปิด Auto-scroll
+          </label>
+        </div>
+        <div class="field" style="justify-content:flex-end">
+          <label class="switch">
+            <input type="checkbox" id="rotateOn"> สลับ Tab อัตโนมัติ
+          </label>
+        </div>
+        <div class="field">
+          <label>ซ่อนแถบ/เต็มจอ เมื่อไม่ขยับเมาส์ (วินาที)</label>
+          <input type="number" id="idleSec" min="1" max="600" step="1">
+        </div>
+        <div class="field" style="justify-content:flex-end">
+          <label class="switch">
+            <input type="checkbox" id="idleOn"> เปิดโหมดเต็มจออัตโนมัติ
+          </label>
+        </div>
+      </div>
+
+      <div class="rowhead">
+        <span>ชื่อ Tab</span><span>URL (https://…)</span><span>วินาที</span><span></span>
+      </div>
+      <div id="rows"></div>
+
+      <button class="btn ghost" id="btnAddRow" style="margin-top:8px">➕ เพิ่มเว็บ</button>
+
+      <div class="actions">
+        <button class="btn primary" id="btnSave">💾 บันทึก</button>
+        <button class="btn ghost" id="btnCancel">ยกเลิก</button>
+      </div>
+
+      <div class="note">
+        💡 <b>เคล็ดลับ:</b> ถ้าเว็บทั้งหมดอยู่โดเมนเดียวกัน auto-scroll จะเลื่อนได้ทุก Tab.
+        เว็บคนละโดเมนจะสลับได้แต่เลื่อนเองไม่ได้ (ข้อจำกัดเบราว์เซอร์).<br>
+        ⌨️ ลัด: <kbd>← →</kbd> สลับ Tab · <kbd>Space</kbd> เล่น/หยุด · <kbd>F</kbd> เต็มจอ · <kbd>Esc</kbd> ปิดตั้งค่า
+      </div>
+    </div>
+  </div>
+
+<script>
+const LS_KEY = 'tabtv_config_v1';
+
+let config = {
+  defDur: 20,
+  scrollSpeed: 1,
+  scrollOn: true,
+  rotateOn: true,
+  idleOn: true,     // auto immersive when mouse idle
+  idleSec: 5,       // seconds of no mouse movement
+  tabs: []  // {name, url, dur}
+};
+
+let current = 0;
+let rotateTimer = null;
+let scrollTimer = null;
+let elapsed = 0;        // ms in current tab
+let paused = false;
+
+const tabbar = document.getElementById('tabbar');
+const frames = document.getElementById('frames');
+const empty = document.getElementById('empty');
+const prog = document.getElementById('prog');
+
+/* ---------- storage ---------- */
+function load() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) config = Object.assign(config, JSON.parse(raw));
+  } catch(e){}
+}
+function save() { localStorage.setItem(LS_KEY, JSON.stringify(config)); }
+
+/* ---------- render tabs + frames ---------- */
+function render() {
+  // tabs
+  [...tabbar.querySelectorAll('.tab')].forEach(t => t.remove());
+  const spacer = document.getElementById('spacer');
+  config.tabs.forEach((t, i) => {
+    const el = document.createElement('div');
+    el.className = 'tab' + (i === current ? ' active' : '');
+    el.innerHTML = `<span class="dot"></span><span>${escapeHtml(t.name || ('Tab '+(i+1)))}</span>`;
+    el.onclick = () => goto(i, true);
+    tabbar.insertBefore(el, spacer);
+  });
+
+  // frames
+  [...frames.querySelectorAll('iframe')].forEach(f => f.remove());
+  if (config.tabs.length === 0) {
+    empty.style.display = 'flex';
+  } else {
+    empty.style.display = 'none';
+    config.tabs.forEach((t, i) => {
+      const f = document.createElement('iframe');
+      f.src = t.url;
+      f.dataset.idx = i;
+      if (i === current) f.classList.add('active');
+      frames.appendChild(f);
+    });
+  }
+  updatePlayBtn();
+}
+
+function escapeHtml(s){ return (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ---------- navigation ---------- */
+function goto(i, userClick) {
+  if (config.tabs.length === 0) return;
+  current = (i + config.tabs.length) % config.tabs.length;
+  [...frames.querySelectorAll('iframe')].forEach(f =>
+    f.classList.toggle('active', +f.dataset.idx === current));
+  [...tabbar.querySelectorAll('.tab')].forEach((t, idx) =>
+    t.classList.toggle('active', idx === current));
+  elapsed = 0;
+  prog.style.width = '0%';
+  if (userClick) restartRotate();
+}
+
+function next() { goto(current + 1); }
+function prev() { goto(current - 1); }
+
+/* ---------- auto rotate ---------- */
+function restartRotate() {
+  clearInterval(rotateTimer);
+  elapsed = 0;
+  if (!config.rotateOn || paused || config.tabs.length < 2) { prog.style.width='0%'; return; }
+  rotateTimer = setInterval(() => {
+    const dur = (config.tabs[current]?.dur || config.defDur) * 1000;
+    elapsed += 250;
+    prog.style.width = Math.min(100, (elapsed/dur)*100) + '%';
+    if (elapsed >= dur) next();
+  }, 250);
+}
+
+/* ---------- auto scroll ---------- */
+function startScroll() {
+  clearInterval(scrollTimer);
+  scrollTimer = setInterval(() => {
+    if (!config.scrollOn || paused) return;
+    const f = frames.querySelector('iframe.active');
+    if (!f) return;
+    try {
+      const w = f.contentWindow;
+      const d = w.document;
+      const max = d.body.scrollHeight - w.innerHeight;
+      if (w.scrollY >= max - 2) {
+        w.scrollTo(0, 0); // reached bottom -> back to top
+      } else {
+        w.scrollBy(0, config.scrollSpeed);
+      }
+    } catch(e) {
+      /* cross-origin: cannot scroll, ignore silently */
+    }
+  }, 40);
+}
+
+/* ---------- play/pause ---------- */
+function togglePlay() {
+  paused = !paused;
+  updatePlayBtn();
+  if (!paused) restartRotate();
+}
+function updatePlayBtn() {
+  document.getElementById('btnPlay').textContent = paused ? '▶️' : '⏸️';
+}
+
+/* ---------- settings panel ---------- */
+const overlay = document.getElementById('overlay');
+const rows = document.getElementById('rows');
+
+function openSettings() {
+  document.getElementById('defDur').value = config.defDur;
+  document.getElementById('scrollSpeed').value = config.scrollSpeed;
+  document.getElementById('scrollOn').checked = config.scrollOn;
+  document.getElementById('rotateOn').checked = config.rotateOn;
+  document.getElementById('idleSec').value = config.idleSec;
+  document.getElementById('idleOn').checked = config.idleOn;
+  rows.innerHTML = '';
+  config.tabs.forEach(t => addRow(t.name, t.url, t.dur));
+  if (config.tabs.length === 0) addRow('', '', config.defDur);
+  overlay.classList.add('open');
+}
+function closeSettings() { overlay.classList.remove('open'); }
+
+function addRow(name='', url='', dur='') {
+  const row = document.createElement('div');
+  row.className = 'tabrow';
+  row.innerHTML = `
+    <input class="r-name" placeholder="เช่น งานขาย" value="${escapeHtml(name)}">
+    <input class="r-url" placeholder="https://..." value="${escapeHtml(url)}">
+    <input class="r-dur" type="number" min="3" placeholder="${config.defDur}" value="${dur||''}">
+    <button class="del" title="ลบ">✕</button>
+  `;
+  row.querySelector('.del').onclick = () => row.remove();
+  rows.appendChild(row);
+}
+
+function saveSettings() {
+  config.defDur = clampNum(document.getElementById('defDur').value, 3, 3600, 20);
+  config.scrollSpeed = clampNum(document.getElementById('scrollSpeed').value, 0, 50, 1);
+  config.scrollOn = document.getElementById('scrollOn').checked;
+  config.rotateOn = document.getElementById('rotateOn').checked;
+  config.idleSec = clampNum(document.getElementById('idleSec').value, 1, 600, 5);
+  config.idleOn = document.getElementById('idleOn').checked;
+  config.tabs = [...rows.querySelectorAll('.tabrow')].map(r => {
+    let url = r.querySelector('.r-url').value.trim();
+    if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+    return {
+      name: r.querySelector('.r-name').value.trim(),
+      url,
+      dur: clampNum(r.querySelector('.r-dur').value, 3, 3600, config.defDur)
+    };
+  }).filter(t => t.url);
+  if (current >= config.tabs.length) current = 0;
+  save();
+  render();
+  goto(current, true);
+  startScroll();
+  resetIdle();
+  closeSettings();
+}
+
+/* ---------- idle / immersive (auto-fullscreen look) ---------- */
+let idleTimer = null;
+function resetIdle() {
+  document.body.classList.remove('immersive');
+  clearTimeout(idleTimer);
+  if (!config.idleOn || config.tabs.length === 0) return;
+  idleTimer = setTimeout(enterImmersive, config.idleSec * 1000);
+}
+function enterImmersive() {
+  if (overlay.classList.contains('open')) return; // don't hide while editing settings
+  document.body.classList.add('immersive');
+  // try real fullscreen too (only succeeds if a user gesture happened recently)
+  if (!document.fullscreenElement) {
+    const p = document.documentElement.requestFullscreen?.();
+    if (p && p.catch) p.catch(() => {});
+  }
+}
+['mousemove','mousedown','keydown','touchstart','wheel'].forEach(ev =>
+  window.addEventListener(ev, resetIdle, { passive: true }));
+
+function clampNum(v, min, max, def) {
+  v = parseInt(v, 10);
+  if (isNaN(v)) return def;
+  return Math.min(max, Math.max(min, v));
+}
+
+/* ---------- fullscreen ---------- */
+function toggleFull() {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+  else document.exitFullscreen();
+}
+
+/* ---------- events ---------- */
+document.getElementById('btnSettings').onclick = openSettings;
+document.getElementById('btnCancel').onclick = closeSettings;
+document.getElementById('btnSave').onclick = saveSettings;
+document.getElementById('btnAddRow').onclick = () => addRow('', '', config.defDur);
+document.getElementById('btnPlay').onclick = togglePlay;
+document.getElementById('btnFull').onclick = toggleFull;
+document.getElementById('btnReload').onclick = () => {
+  const f = frames.querySelector('iframe.active');
+  if (f) f.src = f.src;
+};
+overlay.onclick = (e) => { if (e.target === overlay) closeSettings(); };
+
+document.addEventListener('keydown', (e) => {
+  if (overlay.classList.contains('open')) {
+    if (e.key === 'Escape') closeSettings();
+    return;
+  }
+  if (e.key === 'ArrowRight') next();
+  else if (e.key === 'ArrowLeft') prev();
+  else if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+  else if (e.key.toLowerCase() === 'f') toggleFull();
+});
+
+/* ---------- init ---------- */
+load();
+render();
+if (config.tabs.length) goto(0, false);
+restartRotate();
+startScroll();
+resetIdle();
+if (config.tabs.length === 0) openSettings();
+</script>
+</body>
+</html>
