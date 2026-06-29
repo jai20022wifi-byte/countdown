@@ -91,14 +91,30 @@
   #prog { height: 100%; width: 0%; background: var(--accent); transition: width .25s linear; }
 
   /* ===== Frames area ===== */
-  #frames { flex: 1; position: relative; background: #000; }
+  #frames { flex: 1; position: relative; background: #000; perspective: 2200px; }
   #frames iframe {
     position: absolute; inset: 0;
     width: 100%; height: 100%;
     border: none; background: #fff;
     display: none;
+    transform-origin: left center;
+    backface-visibility: hidden;
   }
   #frames iframe.active { display: block; }
+  /* page-turn: the outgoing page swings open on its left edge (the spine),
+     revealing the next page underneath — like turning a book page */
+  #frames iframe.turning {
+    display: block; z-index: 3;
+    box-shadow: 0 0 60px rgba(0,0,0,.55);
+    animation: pageturn .75s ease-in-out forwards;
+  }
+  @keyframes pageturn {
+    0%   { transform: rotateY(0deg);    filter: brightness(1); }
+    100% { transform: rotateY(-105deg); filter: brightness(.45); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #frames iframe.turning { animation: none; }
+  }
 
   /* immersive (idle) mode — hide chrome, looks fullscreen */
   body.immersive { cursor: none; }
@@ -335,11 +351,38 @@ function escapeHtml(s){ return (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<'
 /* ---------- navigation ---------- */
 function goto(i, userClick) {
   if (config.tabs.length === 0) return;
+  const prevIdx = current;
   current = (i + config.tabs.length) % config.tabs.length;
-  [...frames.querySelectorAll('iframe')].forEach(f =>
-    f.classList.toggle('active', +f.dataset.idx === current));
+
+  // highlight the active tab
   [...tabbar.querySelectorAll('.tab')].forEach((t, idx) =>
     t.classList.toggle('active', idx === current));
+
+  const all = [...frames.querySelectorAll('iframe')];
+  // clear any animation still mid-flight (rapid switches)
+  all.forEach(f => { f.classList.remove('turning'); f.style.zIndex = ''; });
+
+  const oldF = all.find(f => +f.dataset.idx === prevIdx);
+  const newF = all.find(f => +f.dataset.idx === current);
+  const animate = oldF && newF && oldF !== newF &&
+    !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  if (animate) {
+    newF.classList.add('active');   // reveal the next page underneath
+    newF.style.zIndex = '1';
+    oldF.classList.add('turning');  // turn the current page away, on top
+    const done = () => {
+      oldF.classList.remove('turning', 'active');
+      oldF.style.zIndex = '';
+      newF.style.zIndex = '';
+      oldF.removeEventListener('animationend', done);
+    };
+    oldF.addEventListener('animationend', done);
+    setTimeout(done, 850); // safety net if animationend doesn't fire
+  } else {
+    all.forEach(f => f.classList.toggle('active', +f.dataset.idx === current));
+  }
+
   elapsed = 0;
   prog.style.width = '0%';
   if (userClick) restartRotate();
@@ -354,6 +397,7 @@ function restartRotate() {
   elapsed = 0;
   if (!config.rotateOn || paused || config.tabs.length < 2) { prog.style.width='0%'; return; }
   rotateTimer = setInterval(() => {
+    if (paused) return;   // ⏸ frozen while paused — don't advance or update progress
     const dur = (config.tabs[current]?.dur || config.defDur) * 1000;
     elapsed += 250;
     prog.style.width = Math.min(100, (elapsed/dur)*100) + '%';
