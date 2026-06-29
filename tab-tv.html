@@ -241,7 +241,7 @@
 
       <div class="global">
         <div class="field">
-          <label>เวลาเริ่มต้นต่อ Tab (วินาที)</label>
+          <label>ค่าเริ่มต้น (วิ) — ใช้เมื่อไม่ได้ตั้งของแท็บเอง</label>
           <input type="number" id="defDur" min="3" max="3600" step="1">
         </div>
         <div class="field">
@@ -270,7 +270,7 @@
       </div>
 
       <div class="rowhead">
-        <span>ชื่อ Tab</span><span>URL (https://…)</span><span>วินาที</span><span></span>
+        <span>ชื่อ Tab</span><span>URL (https://…)</span><span>⏱ อยู่กี่วิ</span><span></span>
       </div>
       <div id="rows"></div>
 
@@ -282,6 +282,7 @@
       </div>
 
       <div class="note">
+        ⏱ <b>เวลาแยกแต่ละเว็บ:</b> ช่อง "อยู่กี่วิ" ในแต่ละแถว = เวลาของเว็บนั้นเอง — อยากให้อยู่นานใส่เลขเยอะ, แปปเดียวใส่เลขน้อย.<br>
         💡 <b>เคล็ดลับ:</b> ถ้าเว็บทั้งหมดอยู่โดเมนเดียวกัน auto-scroll จะเลื่อนได้ทุก Tab.
         เว็บคนละโดเมนจะสลับได้แต่เลื่อนเองไม่ได้ (ข้อจำกัดเบราว์เซอร์).<br>
         ⌨️ ลัด: <kbd>← →</kbd> สลับ Tab · <kbd>Space</kbd> เล่น/หยุด · <kbd>F</kbd> เต็มจอ · <kbd>Esc</kbd> ปิดตั้งค่า
@@ -467,7 +468,7 @@ function addRow(name='', url='', dur='') {
   row.innerHTML = `
     <input class="r-name" placeholder="เช่น งานขาย" value="${escapeHtml(name)}">
     <input class="r-url" placeholder="https://..." value="${escapeHtml(url)}">
-    <input class="r-dur" type="number" min="3" placeholder="${config.defDur}" value="${dur||''}">
+    <input class="r-dur" type="number" min="3" title="เวลาที่แท็บนี้แสดงก่อนสลับ (วินาที) — มาก= อยู่นาน, น้อย= แปปเดียว" placeholder="${config.defDur}" value="${dur || config.defDur}">
     <button class="del" title="ลบ">✕</button>
   `;
   row.querySelector('.del').onclick = () => row.remove();
