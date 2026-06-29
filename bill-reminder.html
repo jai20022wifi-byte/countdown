@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="lo">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ເຕືອນຄ່າໃຊ້ຈ່າຍປະຈຳເດືອນ</title>
+<style>
+  :root{
+    --bg:#0f172a; --card:#1e293b; --card2:#243349;
+    --text:#e2e8f0; --muted:#94a3b8; --line:#334155;
+    --accent:#38bdf8; --green:#22c55e; --amber:#f59e0b; --red:#ef4444;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{
+    margin:0; font-family:"Noto Sans Lao","Phetsarath OT","Saysettha OT",system-ui,sans-serif;
+    color:var(--text); min-height:100vh; padding:18px 14px 60px;
+    background:
+      radial-gradient(circle at 12% 16%, rgba(99,102,241,.55), transparent 42%),
+      radial-gradient(circle at 88% 10%, rgba(6,182,212,.50), transparent 44%),
+      radial-gradient(circle at 92% 86%, rgba(139,92,246,.52), transparent 46%),
+      radial-gradient(circle at 8% 90%, rgba(16,185,129,.45), transparent 44%),
+      radial-gradient(circle at 50% 55%, rgba(236,72,153,.26), transparent 40%),
+      linear-gradient(160deg,#101a4a,#0b1230 60%,#0a0f24);
+    background-attachment:fixed;   /* ສີສຳຮอง ຖ້າພื້ນຫลังບໍ່ຂึ้น */
+  }
+  header{max-width:1080px;margin:0 auto 18px;}
+  h1{font-size:22px;margin:0 0 4px;display:flex;align-items:center;gap:8px;}
+  .sub{color:var(--muted);font-size:13px;margin:0;}
+  .wrap{max-width:1080px;margin:0 auto;}
+  /* ບັນຊີລາຍການ: ຈໍກວ້າງ 2 ຄໍລຳ, ມືຖື 1 ຄໍລຳ */
+  #list{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;align-items:start;}
+  @media(max-width:780px){ #list{grid-template-columns:1fr;} }
+
+  .add-btn{
+    width:100%; border:0; border-radius:14px; padding:14px;
+    background:linear-gradient(90deg,#0ea5e9,#22c55e); color:#04121f;
+    font-size:16px; font-weight:700; cursor:pointer; margin-bottom:16px;
+    box-shadow:0 6px 18px rgba(14,165,233,.25);
+  }
+  .add-btn:active{transform:translateY(1px);}
+
+  /* ===== ແທບລາຍການ (grid: 2 ແຖວໃນ card) ===== */
+  .card{
+    background:var(--card); border:2px solid var(--line); border-radius:14px;
+    padding:12px 14px; position:relative; overflow:visible;
+    display:grid; column-gap:12px; row-gap:8px; align-items:center;
+    grid-template-columns:auto 1fr auto;
+    grid-template-areas:"icon name status" "dates dates actions";
+    transition:border-color .2s; border-left-width:6px;
+  }
+  .card .icon{font-size:26px;grid-area:icon;}
+
+  /* ປ້າຍວົງມົນສີແດງ ມຸມຂວາເທິງ -> ບອກຈຳນວນຮອບທີ່ເລີຍກຳນົດ */
+  .badge{
+    position:absolute; top:-9px; right:-9px;
+    min-width:26px; height:26px; padding:0 7px;
+    background:var(--red); color:#fff; border-radius:999px;
+    font-size:14px; font-weight:800; line-height:1;
+    display:flex; align-items:center; justify-content:center;
+    border:2px solid var(--bg); box-shadow:0 2px 8px rgba(239,68,68,.6); z-index:3;
+  }
+  .card.alert .badge{ animation:blinkBadge 1s ease-in-out infinite; }
+  @keyframes blinkBadge{
+    0%,100%{transform:scale(1);opacity:1;}
+    50%{transform:scale(1.22);opacity:.6;}
+  }
+  /* ແຖວ 1: ໄອຄອນ + ຊື່ + ສະຖານະ */
+  .card .name{font-size:16px;font-weight:700;grid-area:name;min-width:0;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .status{
+    grid-area:status; justify-self:end; font-size:13px; font-weight:700; padding:6px 10px;
+    border-radius:20px; white-space:nowrap; text-align:center;
+  }
+  .status.ok{background:rgba(34,197,94,.12);color:#86efac;}
+  .status.soon{background:rgba(245,158,11,.14);color:#fcd34d;}
+  .status.due{background:rgba(239,68,68,.16);color:#fca5a5;}
+
+  /* ແຖວ 2: ວັນທີ (ຊ້າຍ) + ປຸ່ມ (ຂວາ) */
+  .dates{grid-area:dates;display:flex;gap:18px;min-width:0;
+    border-top:1px solid var(--line);padding-top:8px;}
+  .field{min-width:0;}
+  .field .label{font-size:10px;color:var(--muted);margin-bottom:1px;}
+  .field .val{font-size:14px;font-weight:600;white-space:nowrap;}
+
+  .actions{grid-area:actions;display:flex;gap:6px;justify-self:end;
+    border-top:1px solid var(--line);padding-top:8px;}
+  .actions button{
+    border:0; border-radius:9px; padding:8px 10px; font-size:13px;
+    font-weight:600; cursor:pointer; font-family:inherit; white-space:nowrap;
+  }
+  .btn-paid{background:#16a34a;color:#fff;}
+  .btn-edit{background:#334155;color:var(--text);}
+  .btn-del{background:#7f1d1d;color:#fecaca;}
+
+  /* ໃກ້ຄົບກຳນົດ / ເກີນກຳນົດ -> ກະພິບສີແດງ */
+  .card.alert{ animation:blinkBorder 1s ease-in-out infinite; }
+  .card.alert .name, .card.alert .status.due{ animation:blinkText 1s ease-in-out infinite; }
+  @keyframes blinkBorder{
+    0%,100%{border-color:var(--red);box-shadow:0 0 0 0 rgba(239,68,68,0);}
+    50%{border-color:#fca5a5;box-shadow:0 0 18px 2px rgba(239,68,68,.55);}
+  }
+  @keyframes blinkText{
+    0%,100%{color:var(--red);}
+    50%{color:#fff;}
+  }
+
+  .empty{text-align:center;color:var(--muted);padding:40px 10px;font-size:15px;grid-column:1/-1;}
+
+  /* Toast / ແຖບຍ້ອນກັບ */
+  .toast{
+    position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(20px);
+    background:#1e293b; border:1px solid var(--line); border-left:4px solid var(--green);
+    color:var(--text); padding:12px 14px; border-radius:12px; display:flex; gap:14px;
+    align-items:center; box-shadow:0 8px 24px rgba(0,0,0,.45); z-index:60; max-width:92vw;
+    opacity:0; pointer-events:none; transition:opacity .2s, transform .2s;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0); pointer-events:auto;}
+  .toast button{
+    border:0; background:var(--accent); color:#04121f; font-weight:700;
+    padding:8px 12px; border-radius:9px; cursor:pointer; font-family:inherit; white-space:nowrap;
+  }
+
+  /* Confirm dialog */
+  .confirm-modal{max-width:380px;text-align:center;border-top-color:var(--green);}
+  .confirm-modal h2{margin:0 0 8px;}
+  .confirm-modal p{margin:0 0 18px;color:var(--muted);font-size:15px;line-height:1.5;}
+  .confirm-actions{display:flex;gap:10px;}
+  .confirm-actions button{
+    flex:1;border:0;border-radius:11px;padding:13px;font-size:15px;font-weight:700;
+    cursor:pointer;font-family:inherit;
+  }
+  .confirm-actions .ok-btn{background:#16a34a;color:#fff;}
+  .confirm-actions .cancel-btn{background:var(--card2);color:var(--text);}
+
+  /* Modal */
+  .overlay{
+    position:fixed;inset:0;background:rgba(2,6,23,.7);
+    display:none;align-items:flex-end;justify-content:center;z-index:50;
+  }
+  .overlay.show{display:flex;}
+  .modal{
+    background:var(--card);width:100%;max-width:720px;border-radius:18px 18px 0 0;
+    padding:18px 16px 26px;border-top:3px solid var(--accent);
+    animation:slideUp .2s ease;
+  }
+  @media(min-width:560px){.overlay{align-items:center;} .modal{border-radius:18px;}}
+  @keyframes slideUp{from{transform:translateY(30px);opacity:.5;}to{transform:translateY(0);opacity:1;}}
+  .modal h2{margin:0 0 14px;font-size:18px;}
+  .modal label{display:block;font-size:13px;color:var(--muted);margin:12px 0 5px;}
+  .modal input{
+    width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);
+    background:var(--card2);color:var(--text);font-size:15px;font-family:inherit;
+  }
+  .icon-pick{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;}
+  .icon-pick button{
+    font-size:20px;width:44px;height:44px;border-radius:10px;border:2px solid var(--line);
+    background:var(--card2);cursor:pointer;
+  }
+  .icon-pick button.sel{border-color:var(--accent);background:#0c4a6e;}
+  .modal .save{
+    width:100%;margin-top:18px;padding:14px;border:0;border-radius:12px;
+    background:linear-gradient(90deg,#0ea5e9,#22c55e);color:#04121f;
+    font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;
+  }
+  .modal .cancel{
+    width:100%;margin-top:8px;padding:12px;border:0;border-radius:12px;
+    background:transparent;color:var(--muted);font-size:14px;cursor:pointer;font-family:inherit;
+  }
+  .cycle-row{display:flex;align-items:center;gap:8px;}
+  .cycle-row input{flex:0 0 90px;}
+  .cycle-row span{color:var(--muted);font-size:14px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>💡 ເຕືອນຄ່າໃຊ້ຈ່າຍປະຈຳເດືອນ</h1>
+  <p class="sub">ຄ່ານ້ຳ ຄ່າໄຟ ແລະ ອື່ນໆ — ເຕືອນເມື່ອໃກ້ຄົບກຳນົດຈ່າຍ</p>
+</header>
+
+<div class="wrap">
+  <button class="add-btn" id="addBtn">➕ ເພີ່ມລາຍການໃໝ່</button>
+  <div id="list"></div>
+</div>
+
+<!-- Modal -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h2 id="modalTitle">ເພີ່ມລາຍການ</h2>
+    <label>ຊື່ລາຍການ</label>
+    <input id="fName" placeholder="ເຊັ່ນ: ຄ່າໄຟ, ຄ່ານ້ຳ, ອິນເຕີເນັດ">
+
+    <label>ໄອຄອນ</label>
+    <div class="icon-pick" id="iconPick"></div>
+
+    <label>ຈ່າຍວັນທີ (ຂອງທຸກເດືອນ)</label>
+    <div class="cycle-row">
+      <input id="fPayDay" type="number" min="1" max="31" value="1">
+      <span>ທຸກໆເດືອນ (1–31)</span>
+    </div>
+
+    <button class="save" id="saveBtn">💾 ບັນທຶກ</button>
+    <button class="cancel" id="cancelBtn">ຍົກເລີກ</button>
+  </div>
+</div>
+
+<!-- Toast (ກົດຈ່າຍແລ້ວ -> ຍ້ອນກັບໄດ້) -->
+<div id="toast" class="toast">
+  <span id="toastMsg"></span>
+  <button id="undoBtn">↩️ ຍ້ອນກັບ</button>
+</div>
+
+<!-- Confirm dialog (ຢืนยัน ຕົກລົງ / ຍົກເລີກ) -->
+<div class="overlay" id="confirmOverlay">
+  <div class="modal confirm-modal">
+    <h2 id="confirmTitle">ຢืนยัน</h2>
+    <p id="confirmMsg"></p>
+    <div class="confirm-actions">
+      <button class="cancel-btn" id="confirmCancel">ຍົກເລີກ</button>
+      <button class="ok-btn" id="confirmOk">ຕົກລົງ</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const ICONS = ["💡","💧","🌐","📱","🏠","🔥","📺","🚗","💳","🎵","🛡️","📦"];
+const ALERT_DAYS = 3; // ໃກ້ຄົບກຳນົດພາຍໃນ 3 ວັນ -> ກະພິບແດງ
+let items = [];
+let editId = null;
+let pickedIcon = ICONS[0];
+
+function load(){
+  const raw = localStorage.getItem("billReminders");
+  if(raw===null){ items = seedExamples(); save(); return; }  // ເປີດຄັ້ງທຳອິດ -> ໃສ່ຕົວຢ່າງ
+  try{ items = JSON.parse(raw); }
+  catch(e){ items = []; }
+  // ຍ້າຍຂໍ້ມູນຮູບແບບເກົ່າ {last,cycle} -> {payDay,paidThrough}
+  let changed=false;
+  items = items.map(it=>{
+    if(it.payDay==null && it.last){
+      const d=new Date(it.last+"T00:00:00");
+      changed=true;
+      return {id:it.id, name:it.name, icon:it.icon||"💡", payDay:d.getDate(), paidThrough:it.last};
+    }
+    return it;
+  });
+  if(changed) save();
+}
+function save(){ localStorage.setItem("billReminders", JSON.stringify(items)); }
+
+// ===== ຄິດໄລ່ວັນທີຈ່າຍປະຈຳເດືອນ =====
+function dueOnMonth(y,m,payDay){            // ວັນຄົບກຳນົດຂອງເດືອນນັ້ນ (ປັບຕາມເດືອນທີ່ສັ້ນກວ່າ)
+  const last=new Date(y,m+1,0).getDate();
+  return new Date(y,m,Math.min(payDay,last));
+}
+function firstDueAfter(payDay, date){       // ວັນຄົບກຳນົດທຳອິດ ຫຼັງ `date`
+  let y=date.getFullYear(), m=date.getMonth();
+  let d=dueOnMonth(y,m,payDay);
+  while(d<=date){ m++; if(m>11){m=0;y++;} d=dueOnMonth(y,m,payDay); }
+  return d;
+}
+function nextDueFromToday(payDay){          // ວັນຄົບກຳນົດທຳອິດ ≥ ມື້ນີ້
+  const t=startToday();
+  let y=t.getFullYear(), m=t.getMonth();
+  let d=dueOnMonth(y,m,payDay);
+  while(d<t){ m++; if(m>11){m=0;y++;} d=dueOnMonth(y,m,payDay); }
+  return d;
+}
+function mostRecentDueOnOrBefore(payDay){   // ວັນຄົບກຳນົດລ່າສຸດ ≤ ມື້ນີ້
+  const t=startToday();
+  let y=t.getFullYear(), m=t.getMonth();
+  let d=dueOnMonth(y,m,payDay);
+  if(d>t){ m--; if(m<0){m=11;y--;} d=dueOnMonth(y,m,payDay); }
+  return d;
+}
+function overdueCount(it){                  // ຈຳນວນຮອບທີ່ເລີຍກຳນົດແຕ່ຍັງບໍ່ໄດ້ຈ່າຍ
+  const t=startToday();
+  let count=0, d=firstDueAfter(it.payDay, parseD(it.paidThrough));
+  while(d<=t){ count++; d=firstDueAfter(it.payDay, d); }
+  return count;
+}
+function parseD(s){ return new Date(s+"T00:00:00"); }
+function startToday(){ const t=new Date(); t.setHours(0,0,0,0); return t; }
+function toStr(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+
+// ===== ຕົວຢ່າງ (ສະແດງຕອນເປີດຄັ້ງທຳອິດ, ລຶບໄດ້ດ້ວຍ 🗑️) =====
+function dueMonthsBefore(payDay, n){          // n ເດືອນກ່ອນວັນຄົບກຳນົດລ່າສຸດ
+  const r=mostRecentDueOnOrBefore(payDay);
+  let y=r.getFullYear(), m=r.getMonth()-n;
+  while(m<0){ m+=12; y--; }
+  return dueOnMonth(y,m,payDay);
+}
+function dayOffset(days){ const d=startToday(); d.setDate(d.getDate()+days); return d.getDate(); }
+function seedExamples(){
+  const soonDay=dayOffset(2), okDay=dayOffset(12);
+  return [
+    {id:'ex1', name:'ຄ່າໄຟ',       icon:'💡', payDay:5,       paidThrough:toStr(dueMonthsBefore(5,2))},
+    {id:'ex2', name:'ຄ່ານ້ຳ',       icon:'💧', payDay:soonDay, paidThrough:toStr(mostRecentDueOnOrBefore(soonDay))},
+    {id:'ex3', name:'ອິນເຕີເນັດ',  icon:'🌐', payDay:okDay,   paidThrough:toStr(mostRecentDueOnOrBefore(okDay))}
+  ];
+}
+
+function fmt(d){
+  if(typeof d === "string") d = new Date(d+"T00:00:00");
+  const dd=String(d.getDate()).padStart(2,"0");
+  const mm=String(d.getMonth()+1).padStart(2,"0");
+  const yy=d.getFullYear();
+  return `${dd}/${mm}/${yy}`;
+}
+function daysLeft(nextDate){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const diff = Math.round((nextDate - today)/86400000);
+  return diff;
+}
+
+function render(){
+  const list = document.getElementById("list");
+  if(items.length===0){
+    list.innerHTML = `<div class="empty">ຍັງບໍ່ມີລາຍການ<br>ກົດ “➕ ເພີ່ມລາຍການໃໝ່” ເພື່ອເລີ່ມ</div>`;
+    return;
+  }
+  // ຮຽງຕາມວັນທີທີ່ຕ້ອງຈ່າຍ (ເລີຍກຳນົດ/ໃກ້ສຸດ ຂຶ້ນກ່ອນ)
+  const sorted = [...items].sort((a,b)=>{
+    return firstDueAfter(a.payDay, parseD(a.paidThrough)) - firstDueAfter(b.payDay, parseD(b.paidThrough));
+  });
+  list.innerHTML = sorted.map(it=>{
+    const oc = overdueCount(it);                                  // ຮອບທີ່ເລີຍກຳນົດ
+    const nextUnpaid = firstDueAfter(it.payDay, parseD(it.paidThrough)); // ຮອບຕໍ່ໄປທີ່ຍັງບໍ່ຈ່າຍ
+    const left = daysLeft(nextUnpaid);
+    let statusClass="ok", statusText="", alert=false, badge="";
+    if(oc>=1){
+      statusClass="due"; statusText=`⚠️ ເລີຍກຳນົດ ${oc} ຮອບ`; alert=true;
+      badge=`<div class="badge">${oc}</div>`;
+    }else if(left===0){
+      statusClass="due"; statusText="🔴 ຄົບກຳນົດມື້ນີ້!"; alert=true;
+    }else if(left<=ALERT_DAYS){
+      statusClass="due"; statusText=`🔴 ອີກ ${left} ວັນ`; alert=true;
+    }else if(left<=7){
+      statusClass="soon"; statusText=`⏳ ອີກ ${left} ວັນ`;
+    }else{
+      statusClass="ok"; statusText=`✅ ອີກ ${left} ວັນ`;
+    }
+    return `
+    <div class="card ${alert?'alert':''}">
+      ${badge}
+      <span class="icon">${it.icon}</span>
+      <div class="name">${escapeHtml(it.name)}</div>
+      <div class="dates">
+        <div class="field">
+          <div class="label">ກຳນົດຈ່າຍ</div>
+          <div class="val">ທຸກວັນທີ ${it.payDay}</div>
+        </div>
+        <div class="field">
+          <div class="label">${oc>=1?'ຕ້ອງຈ່າຍຕັ້ງແຕ່':'ຈ່າຍຄັ້ງຕໍ່ໄປ'}</div>
+          <div class="val">${fmt(nextUnpaid)}</div>
+        </div>
+      </div>
+      <div class="status ${statusClass}">${statusText}</div>
+      <div class="actions">
+        <button class="btn-paid" data-act="paid" data-id="${it.id}">✅ ຈ່າຍແລ້ວ</button>
+        <button class="btn-edit" data-act="edit" data-id="${it.id}">✏️</button>
+        <button class="btn-del" data-act="del" data-id="${it.id}">🗑️</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function openModal(id){
+  editId = id||null;
+  const ip = document.getElementById("iconPick");
+  ip.innerHTML = ICONS.map(ic=>`<button type="button" data-icon="${ic}">${ic}</button>`).join("");
+  if(editId){
+    const it = items.find(x=>x.id===editId);
+    document.getElementById("modalTitle").textContent="ແກ້ໄຂລາຍການ";
+    document.getElementById("fName").value=it.name;
+    document.getElementById("fPayDay").value=it.payDay;
+    pickedIcon=it.icon;
+  }else{
+    document.getElementById("modalTitle").textContent="ເພີ່ມລາຍການ";
+    document.getElementById("fName").value="";
+    document.getElementById("fPayDay").value=new Date().getDate();
+    pickedIcon=ICONS[0];
+  }
+  // mark selected icon
+  [...ip.children].forEach(b=>b.classList.toggle("sel", b.textContent===pickedIcon));
+  document.getElementById("overlay").classList.add("show");
+}
+function pickIcon(el){
+  pickedIcon = el.dataset.icon;
+  [...el.parentNode.children].forEach(b=>b.classList.remove("sel"));
+  el.classList.add("sel");
+}
+function closeModal(){ document.getElementById("overlay").classList.remove("show"); }
+
+function saveItem(){
+  const name=document.getElementById("fName").value.trim();
+  const payDay=parseInt(document.getElementById("fPayDay").value,10);
+  if(!name){ alert("ກະລຸນາໃສ່ຊື່ລາຍການ"); return; }
+  if(!(payDay>=1 && payDay<=31)){ alert("ກະລຸນາໃສ່ວັນທີ 1–31"); return; }
+  if(editId){
+    const it=items.find(x=>x.id===editId);
+    it.name=name; it.payDay=payDay; it.icon=pickedIcon;
+  }else{
+    // ເລີ່ມຕົ້ນຖືວ່າ "ຈ່າຍທັນ" -> ບໍ່ເຕືອນເລີຍກຳນົດທັນທີ, ຈະເລີ່ມນັບເມື່ອຮອບຕໍ່ໄປຜ່ານໄປ
+    const paidThrough = toStr(mostRecentDueOnOrBefore(payDay));
+    items.push({id:Date.now().toString(36), name, icon:pickedIcon, payDay, paidThrough});
+  }
+  closeModal();           // ປິດທັນທີໃຫ້ຮູ້ສຶກໄວ
+  save(); render();
+}
+
+function markPaid(id){
+  const it=items.find(x=>x.id===id);
+  if(!it) return;
+  undoInfo = {id:it.id, prev:it.paidThrough};   // ເກັບຄ່າເກົ່າໄວ້ ເພື່ອຍ້ອນກັບ
+  // ກົດ "ຈ່າຍແລ້ວ" -> ລ້າງຮອບທີ່ເລີຍກຳນົດ ແລະ ນັບຮອບຕໍ່ໄປໃໝ່
+  if(overdueCount(it)>=1){
+    it.paidThrough = toStr(mostRecentDueOnOrBefore(it.payDay)); // ຈ່າຍຮອບທີ່ຄ້າງທັງໝົດ
+  }else{
+    it.paidThrough = toStr(nextDueFromToday(it.payDay));        // ຈ່າຍຮອບປັດຈຸບັນ/ລ່ວງໜ້າ
+  }
+  save(); render();
+  showToast(`✅ ${it.name}: ບັນທຶກວ່າຈ່າຍແລ້ວ`);
+}
+
+let undoInfo=null, toastTimer=null;
+function showToast(msg){
+  document.getElementById("toastMsg").textContent=msg;
+  const t=document.getElementById("toast");
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove("show"), 6000);  // ໂຊ 6 ວິນາທີ
+}
+function undoPaid(){
+  if(!undoInfo) return;
+  const it=items.find(x=>x.id===undoInfo.id);
+  if(it){ it.paidThrough=undoInfo.prev; save(); render(); }   // ກັບໄປ "ຍັງບໍ່ໄດ້ຈ່າຍ"
+  undoInfo=null;
+  document.getElementById("toast").classList.remove("show");
+  clearTimeout(toastTimer);
+}
+function delItem(id){
+  items=items.filter(x=>x.id!==id);
+  save(); render();
+}
+
+// ===== Confirm dialog (ຕົກລົງ / ຍົກເລີກ) =====
+let confirmCb=null;
+function askConfirm(msg, cb, okText){
+  document.getElementById("confirmMsg").textContent=msg;
+  document.getElementById("confirmOk").textContent=okText||"ຕົກລົງ";
+  confirmCb=cb;
+  document.getElementById("confirmOverlay").classList.add("show");
+}
+function closeConfirm(){
+  document.getElementById("confirmOverlay").classList.remove("show");
+  confirmCb=null;
+}
+
+// ===== ຜູກ event listeners (ໃຊ້ໄດ້ທຸກບ່ອນ ແທນ inline onclick) =====
+document.getElementById("addBtn").addEventListener("click", ()=>openModal());
+document.getElementById("saveBtn").addEventListener("click", saveItem);
+document.getElementById("cancelBtn").addEventListener("click", closeModal);
+document.getElementById("undoBtn").addEventListener("click", undoPaid);
+document.getElementById("confirmCancel").addEventListener("click", closeConfirm);
+document.getElementById("confirmOk").addEventListener("click", ()=>{ const cb=confirmCb; closeConfirm(); if(cb) cb(); });
+document.getElementById("confirmOverlay").addEventListener("click", e=>{ if(e.target.id==="confirmOverlay") closeConfirm(); });
+
+// ເລືອກໄອຄອນ (event delegation)
+document.getElementById("iconPick").addEventListener("click", e=>{
+  const b = e.target.closest("button[data-icon]");
+  if(b) pickIcon(b);
+});
+
+// ປຸ່ມໃນແຕ່ລະແທບ (event delegation)
+document.getElementById("list").addEventListener("click", e=>{
+  const b = e.target.closest("button[data-act]");
+  if(!b) return;
+  const id = b.dataset.id;
+  const it = items.find(x=>x.id===id);
+  if(b.dataset.act==="paid"){
+    askConfirm(`ຢืนยัน "${it?it.name:''}" ຈ່າຍແລ້ວ?`, ()=>markPaid(id), "ຕົກລົງ");
+  }else if(b.dataset.act==="edit"){
+    openModal(id);
+  }else if(b.dataset.act==="del"){
+    askConfirm(`ລຶບ "${it?it.name:''}" ?`, ()=>delItem(id), "ລຶບ");
+  }
+});
+
+// ປິດ modal ເມື່ອກົດພື້ນຫຼັງ
+document.getElementById("overlay").addEventListener("click",e=>{
+  if(e.target.id==="overlay") closeModal();
+});
+
+load(); render();
+// ອັບເດດສະຖານະທຸກໆ 1 ນາທີ (ກໍລະນີເປີດໄວ້ຂ້າມມື້)
+setInterval(render, 60000);
+</script>
+</body>
+</html>
