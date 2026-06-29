@@ -121,6 +121,12 @@
   body.immersive #tabbar,
   body.immersive #progwrap { display: none; }
 
+  /* transparent layer ON TOP of the iframe during immersive — so moving the
+     mouse over the embedded site is still detected and brings the bar back
+     (iframes swallow the parent window's mouse events otherwise) */
+  #wakezone { position: fixed; inset: 0; z-index: 40; display: none; background: transparent; }
+  body.immersive #wakezone { display: block; cursor: none; }
+
   #empty {
     position: absolute; inset: 0;
     display: flex; flex-direction: column;
@@ -512,6 +518,28 @@ function enterImmersive() {
 }
 ['mousemove','mousedown','keydown','touchstart','wheel'].forEach(ev =>
   window.addEventListener(ev, resetIdle, { passive: true }));
+
+// wake layer: catches mouse movement over the embedded iframe while immersive
+const wakezone = document.createElement('div');
+wakezone.id = 'wakezone';
+document.body.appendChild(wakezone);
+['mousemove','mousedown','wheel','touchstart'].forEach(ev =>
+  wakezone.addEventListener(ev, resetIdle, { passive: true }));
+
+// real fullscreen (hides the browser's own bars) can only start from a user
+// gesture — so the first click/keypress puts us into true fullscreen. After
+// that, idle just hides the in-page bar on top of it.
+let autoFsTried = false;
+function maybeAutoFullscreen() {
+  if (autoFsTried || !config.idleOn || config.tabs.length === 0) return;
+  if (document.fullscreenElement) { autoFsTried = true; return; }
+  autoFsTried = true;
+  const p = document.documentElement.requestFullscreen?.();
+  if (p && p.catch) p.catch(() => { autoFsTried = false; }); // let it retry if blocked
+}
+['pointerdown','keydown'].forEach(ev =>
+  window.addEventListener(ev, maybeAutoFullscreen));
+wakezone.addEventListener('pointerdown', maybeAutoFullscreen);
 
 function clampNum(v, min, max, def) {
   v = parseInt(v, 10);
