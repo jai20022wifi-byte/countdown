@@ -283,7 +283,8 @@
 
       <div id="shareArea" style="margin-top:16px; border-top:1px solid #2a3a4a; padding-top:14px;">
         <div style="font-size:13px; color:var(--muted); margin-bottom:8px;">
-          🔗 <b style="color:var(--text)">ย้ายไปเครื่องอื่น / TV</b> — สร้างลิงก์ที่มีเว็บทั้งหมดฝังอยู่ เปิดลิงก์บน TV แล้วเว็บจะเด้งมาเอง
+          🔗 <b style="color:var(--text)">ย้ายไปเครื่องอื่น / TV</b> — กดปุ่มแล้วได้ <b style="color:var(--accent)">ลิงก์สั้น</b> (เช่น da.gd/xxxxx)
+          พิมพ์บน TV ง่ายๆ → เว็บทั้งหมดเด้งมาเอง
         </div>
         <div class="actions" style="margin-top:0">
           <button class="btn primary" id="btnShare">🔗 สร้าง + คัดลอกลิงก์</button>
@@ -330,15 +331,16 @@ const prog = document.getElementById('prog');
 
 /* ---------- storage ---------- */
 function load() {
-  // 1) if opened via a share link (#cfg=...), import it and overwrite
+  // 1) if opened via a share link (?cfg=... or #cfg=...), import it and overwrite
   try {
-    const m = location.hash.match(/#cfg=([^&]+)/);
-    if (m) {
-      const imported = decodeConfig(m[1]);
+    let code = new URLSearchParams(location.search).get('cfg');
+    if (!code) { const m = location.hash.match(/[#&]cfg=([^&]+)/); if (m) code = m[1]; }
+    if (code) {
+      const imported = decodeConfig(code);
       if (imported) {
         config = Object.assign(config, imported);
         save();
-        history.replaceState(null, '', location.pathname + location.search); // clean URL
+        history.replaceState(null, '', location.pathname); // clean URL (drop ?cfg / #cfg)
         return;
       }
     }
@@ -353,33 +355,60 @@ function save() { localStorage.setItem(LS_KEY, JSON.stringify(config)); }
 
 /* ---------- share / import (move config between devices) ---------- */
 function encodeConfig(cfg) {
-  // JSON -> UTF-8 safe base64
-  return btoa(unescape(encodeURIComponent(JSON.stringify(cfg))));
+  // JSON -> UTF-8 -> base64url (safe in query strings & through short links)
+  return btoa(unescape(encodeURIComponent(JSON.stringify(cfg))))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 function decodeConfig(code) {
   try {
-    code = code.trim();
-    // accept a full share link or a raw code
-    const m = code.match(/#cfg=([^&\s]+)/);
+    code = (code || '').trim();
+    // accept a full link (?cfg= or #cfg=) or a raw code
+    const m = code.match(/[?#&]cfg=([^&\s]+)/);
     if (m) code = m[1];
-    return JSON.parse(decodeURIComponent(escape(atob(code))));
+    let b64 = code.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    return JSON.parse(decodeURIComponent(escape(atob(b64))));
   } catch(e) { return null; }
 }
 function makeShareLink() {
-  return location.origin + location.pathname + '#cfg=' + encodeConfig(config);
+  return location.origin + location.pathname + '?cfg=' + encodeConfig(config);
+}
+async function shortenUrl(longUrl) {
+  const enc = encodeURIComponent(longUrl);
+  // da.gd (shortest) first, TinyURL as fallback — both allow browser calls (CORS)
+  for (const api of ['https://da.gd/s?url=' + enc,
+                     'https://tinyurl.com/api-create.php?url=' + enc]) {
+    try {
+      const r = await fetch(api);
+      if (r.ok) {
+        const t = (await r.text()).trim();
+        if (/^https?:\/\/\S+$/.test(t)) return t;
+      }
+    } catch(e) {}
+  }
+  return null;
 }
 async function shareConfig() {
   if (config.tabs.length === 0) { alert('ยังไม่มีเว็บให้แชร์ — เพิ่มเว็บแล้วกด 💾 บันทึกก่อน'); return; }
-  const link = makeShareLink();
+  const longLink = makeShareLink();
   const box = document.getElementById('shareBox');
-  box.style.display = 'block';
-  box.value = link;
-  box.select();
-  try { await navigator.clipboard.writeText(link); box.dataset.copied = '1'; } catch(e){}
   const btn = document.getElementById('btnShare');
-  const old = btn.textContent;
-  btn.textContent = box.dataset.copied ? '✅ คัดลอกแล้ว! ส่งเข้า TV ได้เลย' : '👇 ก๊อปลิงก์ด้านล่าง';
-  setTimeout(() => { btn.textContent = old; }, 2500);
+  const oldBtn = btn.textContent;
+  box.style.display = 'block';
+  box.value = 'กำลังย่อลิงก์ให้สั้น…';
+  btn.disabled = true; btn.textContent = '⏳ กำลังย่อลิงก์…';
+
+  const short = await shortenUrl(longLink);
+  const finalLink = short || longLink;
+  box.value = finalLink;
+  box.select();
+  let copied = false;
+  try { await navigator.clipboard.writeText(finalLink); copied = true; } catch(e){}
+
+  btn.disabled = false;
+  if (short) btn.textContent = copied ? '✅ ลิงก์สั้นคัดลอกแล้ว! พิมพ์บน TV ได้เลย' : '👇 ลิงก์สั้นอยู่ด้านล่าง';
+  else       btn.textContent = copied ? '✅ คัดลอกแล้ว (ย่อไม่ได้ ใช้ตัวยาว)' : '👇 ก๊อปลิงก์ด้านล่าง';
+  setTimeout(() => { btn.textContent = oldBtn; }, 3200);
 }
 function importConfig() {
   const code = prompt('วางลิงก์แชร์ หรือโค้ด ที่ได้จากอีกเครื่อง แล้วกด OK:');
