@@ -281,6 +281,20 @@
         <button class="btn ghost" id="btnCancel">ยกเลิก</button>
       </div>
 
+      <div id="shareArea" style="margin-top:16px; border-top:1px solid #2a3a4a; padding-top:14px;">
+        <div style="font-size:13px; color:var(--muted); margin-bottom:8px;">
+          🔗 <b style="color:var(--text)">ย้ายไปเครื่องอื่น / TV</b> — สร้างลิงก์ที่มีเว็บทั้งหมดฝังอยู่ เปิดลิงก์บน TV แล้วเว็บจะเด้งมาเอง
+        </div>
+        <div class="actions" style="margin-top:0">
+          <button class="btn primary" id="btnShare">🔗 สร้าง + คัดลอกลิงก์</button>
+          <button class="btn ghost" id="btnImport">📥 วางลิงก์/โค้ด แล้วนำเข้า</button>
+        </div>
+        <textarea id="shareBox" readonly placeholder="กด 🔗 สร้าง + คัดลอกลิงก์ แล้วลิงก์จะขึ้นตรงนี้ (ก๊อปส่งเข้า TV ได้เลย)"
+          style="width:100%; margin-top:10px; min-height:60px; background:var(--bg); color:var(--text);
+                 border:1px solid #33475a; border-radius:8px; padding:9px; font-size:12px; resize:vertical;
+                 font-family:monospace; display:none;"></textarea>
+      </div>
+
       <div class="note">
         ⏱ <b>เวลาแยกแต่ละเว็บ:</b> ช่อง "อยู่กี่วิ" ในแต่ละแถว = เวลาของเว็บนั้นเอง — อยากให้อยู่นานใส่เลขเยอะ, แปปเดียวใส่เลขน้อย.<br>
         💡 <b>เคล็ดลับ:</b> ถ้าเว็บทั้งหมดอยู่โดเมนเดียวกัน auto-scroll จะเลื่อนได้ทุก Tab.
@@ -316,12 +330,71 @@ const prog = document.getElementById('prog');
 
 /* ---------- storage ---------- */
 function load() {
+  // 1) if opened via a share link (#cfg=...), import it and overwrite
+  try {
+    const m = location.hash.match(/#cfg=([^&]+)/);
+    if (m) {
+      const imported = decodeConfig(m[1]);
+      if (imported) {
+        config = Object.assign(config, imported);
+        save();
+        history.replaceState(null, '', location.pathname + location.search); // clean URL
+        return;
+      }
+    }
+  } catch(e){}
+  // 2) otherwise load this device's saved config
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (raw) config = Object.assign(config, JSON.parse(raw));
   } catch(e){}
 }
 function save() { localStorage.setItem(LS_KEY, JSON.stringify(config)); }
+
+/* ---------- share / import (move config between devices) ---------- */
+function encodeConfig(cfg) {
+  // JSON -> UTF-8 safe base64
+  return btoa(unescape(encodeURIComponent(JSON.stringify(cfg))));
+}
+function decodeConfig(code) {
+  try {
+    code = code.trim();
+    // accept a full share link or a raw code
+    const m = code.match(/#cfg=([^&\s]+)/);
+    if (m) code = m[1];
+    return JSON.parse(decodeURIComponent(escape(atob(code))));
+  } catch(e) { return null; }
+}
+function makeShareLink() {
+  return location.origin + location.pathname + '#cfg=' + encodeConfig(config);
+}
+async function shareConfig() {
+  if (config.tabs.length === 0) { alert('ยังไม่มีเว็บให้แชร์ — เพิ่มเว็บแล้วกด 💾 บันทึกก่อน'); return; }
+  const link = makeShareLink();
+  const box = document.getElementById('shareBox');
+  box.style.display = 'block';
+  box.value = link;
+  box.select();
+  try { await navigator.clipboard.writeText(link); box.dataset.copied = '1'; } catch(e){}
+  const btn = document.getElementById('btnShare');
+  const old = btn.textContent;
+  btn.textContent = box.dataset.copied ? '✅ คัดลอกแล้ว! ส่งเข้า TV ได้เลย' : '👇 ก๊อปลิงก์ด้านล่าง';
+  setTimeout(() => { btn.textContent = old; }, 2500);
+}
+function importConfig() {
+  const code = prompt('วางลิงก์แชร์ หรือโค้ด ที่ได้จากอีกเครื่อง แล้วกด OK:');
+  if (!code) return;
+  const imported = decodeConfig(code);
+  if (!imported || !imported.tabs) { alert('❌ ลิงก์/โค้ดไม่ถูกต้อง ลองก๊อปใหม่ให้ครบ'); return; }
+  config = Object.assign(config, imported);
+  save();
+  render();
+  current = 0;
+  goto(0, true);
+  startScroll();
+  openSettings(); // refresh fields to show imported tabs
+  alert('✅ นำเข้าสำเร็จ! ได้เว็บ ' + imported.tabs.length + ' อัน');
+}
 
 /* ---------- render tabs + frames ---------- */
 function render() {
@@ -559,6 +632,8 @@ document.getElementById('btnSettings').onclick = openSettings;
 document.getElementById('btnCancel').onclick = closeSettings;
 document.getElementById('btnSave').onclick = saveSettings;
 document.getElementById('btnAddRow').onclick = () => addRow('', '', config.defDur);
+document.getElementById('btnShare').onclick = shareConfig;
+document.getElementById('btnImport').onclick = importConfig;
 document.getElementById('btnPlay').onclick = togglePlay;
 document.getElementById('btnFull').onclick = toggleFull;
 document.getElementById('btnReload').onclick = () => {
