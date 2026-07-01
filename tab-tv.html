@@ -171,26 +171,30 @@
 
   .tabrow {
     display: grid;
-    grid-template-columns: 1fr 1.6fr 70px auto;
+    grid-template-columns: 1fr 1.6fr 62px 54px auto;
     gap: 8px; align-items: center;
     background: var(--bar2);
     padding: 10px; border-radius: 10px; margin-bottom: 8px;
   }
-  .tabrow input {
+  .tabrow input[type=text], .tabrow input[type=number] {
     background: var(--bg); color: var(--text);
     border: 1px solid #33475a; border-radius: 7px;
     padding: 7px 9px; font-size: 13px; width: 100%;
   }
+  .tabrow .scroll-cell { display: flex; justify-content: center; align-items: center; }
+  .tabrow .scroll-cell input[type=checkbox] { width: 20px; height: 20px; cursor: pointer; accent-color: var(--accent); }
   .tabrow .del {
     background: var(--danger); color: #fff; border: none;
     border-radius: 7px; padding: 7px 10px; cursor: pointer; font-size: 14px;
   }
   .rowhead {
     display: grid;
-    grid-template-columns: 1fr 1.6fr 70px auto;
+    grid-template-columns: 1fr 1.6fr 62px 54px auto;
     gap: 8px; font-size: 11px; color: var(--muted);
     padding: 0 10px 4px; text-transform: uppercase; letter-spacing: .5px;
+    text-align: center;
   }
+  .rowhead span:first-child, .rowhead span:nth-child(2) { text-align: left; }
 
   .actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
   .btn {
@@ -270,7 +274,7 @@
       </div>
 
       <div class="rowhead">
-        <span>ชื่อ Tab</span><span>URL (https://…)</span><span>⏱ อยู่กี่วิ</span><span></span>
+        <span>ชื่อ Tab</span><span>URL (https://…)</span><span>⏱ กี่วิ</span><span>🖱️ เลื่อน</span><span></span>
       </div>
       <div id="rows"></div>
 
@@ -519,6 +523,8 @@ function startScroll() {
   clearInterval(scrollTimer);
   scrollTimer = setInterval(() => {
     if (!config.scrollOn || paused) return;
+    const t = config.tabs[current];
+    if (t && t.scroll === false) return;   // this tab is set to NOT scroll
     const f = frames.querySelector('iframe.active');
     if (!f) return;
     try {
@@ -558,19 +564,22 @@ function openSettings() {
   document.getElementById('idleSec').value = config.idleSec;
   document.getElementById('idleOn').checked = config.idleOn;
   rows.innerHTML = '';
-  config.tabs.forEach(t => addRow(t.name, t.url, t.dur));
-  if (config.tabs.length === 0) addRow('', '', config.defDur);
+  config.tabs.forEach(t => addRow(t.name, t.url, t.dur, t.scroll !== false));
+  if (config.tabs.length === 0) addRow('', '', config.defDur, true);
   overlay.classList.add('open');
 }
 function closeSettings() { overlay.classList.remove('open'); }
 
-function addRow(name='', url='', dur='') {
+function addRow(name='', url='', dur='', scroll=true) {
   const row = document.createElement('div');
   row.className = 'tabrow';
   row.innerHTML = `
-    <input class="r-name" placeholder="เช่น งานขาย" value="${escapeHtml(name)}">
-    <input class="r-url" placeholder="https://..." value="${escapeHtml(url)}">
+    <input type="text" class="r-name" placeholder="เช่น งานขาย" value="${escapeHtml(name)}">
+    <input type="text" class="r-url" placeholder="https://..." value="${escapeHtml(url)}">
     <input class="r-dur" type="number" min="3" title="เวลาที่แท็บนี้แสดงก่อนสลับ (วินาที) — มาก= อยู่นาน, น้อย= แปปเดียว" placeholder="${config.defDur}" value="${dur || config.defDur}">
+    <div class="scroll-cell">
+      <input type="checkbox" class="r-scroll" title="ติ๊ก = เว็บนี้เลื่อนลงช้าๆ / ไม่ติ๊ก = อยู่นิ่ง" ${scroll ? 'checked' : ''}>
+    </div>
     <button class="del" title="ลบ">✕</button>
   `;
   row.querySelector('.del').onclick = () => row.remove();
@@ -590,7 +599,8 @@ function saveSettings() {
     return {
       name: r.querySelector('.r-name').value.trim(),
       url,
-      dur: clampNum(r.querySelector('.r-dur').value, 3, 3600, config.defDur)
+      dur: clampNum(r.querySelector('.r-dur').value, 3, 3600, config.defDur),
+      scroll: r.querySelector('.r-scroll').checked
     };
   }).filter(t => t.url);
   if (current >= config.tabs.length) current = 0;
