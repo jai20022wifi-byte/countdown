@@ -371,8 +371,11 @@ var NTEAMS = 5; // จำนวนชุดสีทีมใน CSS (.h0/.g0/.a
 var CHIP_BG = ['#eff6ff', '#fdf2f8', '#fffbeb', '#f0fdf4', '#f5f3ff'];
 
 var LS_KEY = 'sheet-tv-config-v1';
+// ชีตเริ่มต้น — เปิดจากเครื่องไหนก็ขึ้นชีตนี้ทันที ไม่ต้องตั้งค่า (เปลี่ยนชีตได้ใน ⚙️)
+var DEFAULT_SHEET_ID = '1zgZHS6714mK-oDgYxElO5yr4Mf1P4Zv4J72X6YGmO6Q';
+var DEFAULT_GID = '0';
 var cfg = {
-  sheetId: '', gid: '', title: '',
+  sheetId: DEFAULT_SHEET_ID, gid: DEFAULT_GID, title: '',
   refresh: 60, group: 2, font: 100, autoscroll: false, view: 'table'
 };
 
@@ -383,6 +386,8 @@ try {
   // เวอร์ชันก่อนเคยตั้งค่าเริ่มต้นเป็น "การ์ด" — รีเซ็ตกลับเป็นตารางครั้งเดียว
   if (!cfg.m1) { cfg.view = 'table'; cfg.m1 = true; saveCfg(); }
 } catch (e) {}
+// เครื่องที่ยังไม่เคยตั้งชีตเอง → ใช้ชีตเริ่มต้น
+if (!cfg.sheetId) { cfg.sheetId = DEFAULT_SHEET_ID; cfg.gid = DEFAULT_GID; }
 
 (function readParams() {
   var p = new URLSearchParams(location.search);
