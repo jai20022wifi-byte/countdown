@@ -71,6 +71,7 @@
   /* ---- table ---- */
   table {
     width: 100%;
+    table-layout: fixed;
     border-collapse: separate;
     border-spacing: 0;
     font-size: calc(21px * var(--fontscale));
@@ -83,6 +84,8 @@
     padding: calc(9px * var(--fontscale)) calc(14px * var(--fontscale));
     text-align: center;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     border-bottom: 1px solid var(--line);
   }
   td + td, th + th { border-left: 1px solid rgba(15,23,42,.05); }
@@ -507,6 +510,19 @@ function render(rows) {
   var data = rows.slice(1);
   var g = Math.max(1, cfg.group | 0);
 
+  // หัวคอลัมน์ที่ว่างในชีต → ตั้งชื่อให้อัตโนมัติตามข้อมูลในคอลัมน์นั้น
+  header = header.map(function (h, i) {
+    if (i === 0 || h.t !== '') return h;
+    var dates = 0, filled = 0;
+    data.forEach(function (r) {
+      if (r[i] && r[i].t !== '') { filled++; if (r[i].d) dates++; }
+    });
+    var name = (filled > 0 && dates >= filled / 2)
+      ? 'ອັບເດດລ່າສຸດ'
+      : 'ທີມ ' + (Math.floor((i - 1) / g) + 1);
+    return { t: name, d: null };
+  });
+
   if (cfg.view === 'cards') renderCards(wrap, header, data, g);
   else renderTable(wrap, header, data, g);
   restartAutoScroll();
@@ -514,7 +530,19 @@ function render(rows) {
 
 function renderTable(wrap, header, data, g) {
   function grp(i) { return Math.floor((i - 1) / g) % NTEAMS; }
-  var html = '<table><thead><tr>';
+  // ทุกคอลัมน์ข้อมูลกว้างเท่ากันหมด (คอลัมน์ชื่อสถานที่กว้างกว่านิดหน่อย)
+  // อย่าให้คอลัมน์แคบจนตัวเลขถูกตัด — จอเล็กให้เลื่อนข้างแทน
+  var n = header.length;
+  var minW = 220 + (n - 1) * 150;
+  var html = '<table style="min-width:calc(' + minW + 'px * var(--fontscale))">';
+  if (n > 1) {
+    var w0 = Math.min(30, Math.max(16, (100 / n) * 1.5));
+    var wRest = (100 - w0) / (n - 1);
+    html += '<colgroup><col style="width:' + w0.toFixed(2) + '%">';
+    for (var ci = 1; ci < n; ci++) html += '<col style="width:' + wRest.toFixed(2) + '%">';
+    html += '</colgroup>';
+  }
+  html += '<thead><tr>';
   header.forEach(function (h, i) {
     var cls = 'c' + i + (i > 0 ? ' h' + grp(i) : '');
     html += '<th class="' + cls + '">' + escapeHtml(h.t) + '</th>';
@@ -546,7 +574,7 @@ function renderCards(wrap, header, data, g) {
   var teams = [];
   for (var k = 0; k < nGroups; k++) {
     var h = header[1 + k * g] ? header[1 + k * g].t : '';
-    teams.push(h || ('คอลัมน์ ' + (2 + k * g)));
+    teams.push(h || ('ທີມ ' + (k + 1)));
   }
   var html = '<div id="grid">';
   data.forEach(function (r) {
