@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sheet TV — ตารางจาก Google Sheet</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --title-bg: #e60000;
+    --title-fg: #ffffff;
+    --border: #444;
+    --amount: #7f1d1d;
+    --fontscale: 1;
+  }
+  html, body { height: 100%; }
+  body {
+    font-family: "Segoe UI", "Leelawadee UI", "Noto Sans Lao", Tahoma, sans-serif;
+    background: #ffffff;
+    color: #111;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+  body.idle { cursor: none; }
+
+  /* ===== Title bar ===== */
+  #titlebar {
+    background: var(--title-bg);
+    color: var(--title-fg);
+    display: flex;
+    align-items: center;
+    padding: calc(10px * var(--fontscale)) 16px;
+    flex-shrink: 0;
+    border: 1px solid var(--border);
+    border-bottom: none;
+  }
+  #status {
+    font-size: calc(14px * var(--fontscale));
+    opacity: .85;
+    width: 220px;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  #title {
+    flex: 1;
+    text-align: center;
+    font-size: calc(30px * var(--fontscale));
+    font-weight: 800;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #clock {
+    font-size: calc(18px * var(--fontscale));
+    width: 220px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ===== Table ===== */
+  #tblwrap { flex: 1; overflow: auto; border: 1px solid var(--border); }
+  #tblwrap::-webkit-scrollbar { width: 0; height: 0; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: calc(20px * var(--fontscale));
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: calc(8px * var(--fontscale)) calc(12px * var(--fontscale));
+    text-align: center;
+    white-space: nowrap;
+  }
+  thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    font-weight: 700;
+    background: #f3f3f3;
+  }
+  td.c0, th.c0 { text-align: left; background: #ffffff; }
+  td.money { color: var(--amount); font-weight: 700; }
+  td { color: #1a1a1a; }
+
+  #msg {
+    padding: 40px 20px;
+    text-align: center;
+    font-size: 20px;
+    color: #333;
+    line-height: 1.8;
+  }
+  #msg .big { font-size: 26px; font-weight: 700; margin-bottom: 10px; }
+  #msg code { background: #eee; padding: 2px 8px; border-radius: 4px; }
+
+  /* ===== Floating buttons ===== */
+  #fabs {
+    position: fixed;
+    top: 10px; right: 10px;
+    display: flex;
+    gap: 8px;
+    z-index: 50;
+    opacity: 0;
+    transition: opacity .3s;
+    pointer-events: none;
+  }
+  body:not(.idle) #fabs { opacity: 1; pointer-events: auto; }
+  .fab {
+    background: rgba(0,0,0,.65);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    width: 42px; height: 42px;
+    font-size: 20px;
+    cursor: pointer;
+  }
+  .fab:hover { background: rgba(0,0,0,.85); }
+
+  /* ===== Settings panel ===== */
+  #overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.55);
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    z-index: 100;
+    overflow: auto;
+    padding: 30px 10px;
+  }
+  #overlay.show { display: flex; }
+  #panel {
+    background: #fff;
+    border-radius: 12px;
+    padding: 22px;
+    width: 560px;
+    max-width: 96vw;
+    font-size: 15px;
+  }
+  #panel h2 { font-size: 20px; margin-bottom: 14px; }
+  #panel label { display: block; font-weight: 600; margin: 12px 0 4px; }
+  #panel input[type=text], #panel input[type=number] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #bbb;
+    border-radius: 6px;
+    font-size: 15px;
+  }
+  #panel .hint { font-size: 13px; color: #666; margin-top: 3px; line-height: 1.5; }
+  #panel .row2 { display: flex; gap: 12px; }
+  #panel .row2 > div { flex: 1; }
+  #panel .btns { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+  #panel button {
+    padding: 9px 16px;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  #saveBtn { background: #0d9488; color: #fff; }
+  #shareBtn { background: #2563eb; color: #fff; }
+  #closeBtn { background: #e5e7eb; }
+  #shareOut {
+    margin-top: 10px;
+    font-size: 13px;
+    word-break: break-all;
+    background: #f3f4f6;
+    padding: 8px;
+    border-radius: 6px;
+    display: none;
+  }
+  #panel .setupbox {
+    background: #fef9c3;
+    border: 1px solid #eab308;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13.5px;
+    line-height: 1.7;
+    margin-top: 14px;
+  }
+  #panel input[type=range] { width: 100%; }
+  .chk { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div id="titlebar">
+  <div id="status">…</div>
+  <div id="title">Sheet TV</div>
+  <div id="clock"></div>
+</div>
+<div id="tblwrap">
+  <div id="msg">
+    <div class="big">ยังไม่ได้ตั้งค่า Google Sheet</div>
+    กดปุ่ม ⚙️ มุมขวาบน แล้ววางลิงก์ Google Sheet ของคุณ
+  </div>
+</div>
+
+<div id="fabs">
+  <button class="fab" id="fsBtn" title="เต็มจอ">⛶</button>
+  <button class="fab" id="reloadBtn" title="โหลดใหม่">↻</button>
+  <button class="fab" id="gearBtn" title="ตั้งค่า">⚙️</button>
+</div>
+
+<div id="overlay">
+  <div id="panel">
+    <h2>⚙️ ตั้งค่า Sheet TV</h2>
+
+    <label>ลิงก์ Google Sheet</label>
+    <input type="text" id="inUrl" placeholder="https://docs.google.com/spreadsheets/d/....../edit#gid=0">
+    <div class="hint">ก๊อปลิงก์จากช่อง address ตอนเปิดชีต (ถ้าอยู่แท็บไหนของชีต จะแสดงแท็บนั้น)</div>
+
+    <label>ชื่อหัวตาราง (ไม่ใส่ = ใช้แถวแรกของชีต)</label>
+    <input type="text" id="inTitle" placeholder="เช่น ທົວລົດລາກ InBox">
+
+    <div class="row2">
+      <div>
+        <label>รีเฟรชทุก (วินาที)</label>
+        <input type="number" id="inRefresh" min="10" value="60">
+      </div>
+      <div>
+        <label>จำนวนคอลัมน์ต่อกลุ่มสี</label>
+        <input type="number" id="inGroup" min="1" value="2">
+        <div class="hint">เช่น ยอดเงิน+วันที่ = 2 คอลัมน์ต่อทีม</div>
+      </div>
+    </div>
+
+    <label>ขนาดตัวหนังสือ: <span id="fontVal">100%</span></label>
+    <input type="range" id="inFont" min="60" max="220" value="100">
+
+    <div class="chk">
+      <input type="checkbox" id="inScroll">
+      <label for="inScroll" style="margin:0">เลื่อนจออัตโนมัติ (ถ้าแถวเยอะเกินจอ)</label>
+    </div>
+
+    <div class="btns">
+      <button id="saveBtn">💾 บันทึก</button>
+      <button id="shareBtn">🔗 สร้างลิงก์สำหรับ TV</button>
+      <button id="closeBtn">ปิด</button>
+    </div>
+    <div id="shareOut"></div>
+
+    <div class="setupbox">
+      <b>สำคัญ:</b> ชีตต้องแชร์แบบสาธารณะถึงจะอ่านได้<br>
+      ในชีต → ปุ่ม <b>Share</b> → General access → <b>Anyone with the link</b> → <b>Viewer</b> → Done<br>
+      (ดูอย่างเดียว ไม่มีใครแก้ชีตได้)
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ===== column group colors (like the reference image) ===== */
+var PALETTE = [
+  { head: '#cfe2f3', cell: '#dce9f8' },  // ฟ้า
+  { head: '#d5a6bd', cell: '#dcb3c6' },  // ชมพูม่วง
+  { head: '#ffe599', cell: '#fdf1cd' },  // เหลือง
+  { head: '#b6d7a8', cell: '#d9ead3' },  // เขียว
+  { head: '#b4a7d6', cell: '#d9d2e9' }   // ม่วง
+];
+
+var LS_KEY = 'sheet-tv-config-v1';
+var cfg = {
+  sheetId: '', gid: '', title: '',
+  refresh: 60, group: 2, font: 100, autoscroll: false
+};
+
+/* ===== load config: URL params override saved config ===== */
+try {
+  var saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
+  if (saved) cfg = Object.assign(cfg, saved);
+} catch (e) {}
+
+(function readParams() {
+  var p = new URLSearchParams(location.search);
+  if (p.get('s')) {
+    cfg.sheetId = p.get('s');
+    cfg.gid = p.get('gid') || '';
+    cfg.title = p.get('t') || '';
+    if (p.get('r')) cfg.refresh = parseInt(p.get('r'), 10) || 60;
+    if (p.get('g')) cfg.group = parseInt(p.get('g'), 10) || 2;
+    if (p.get('f')) cfg.font = parseInt(p.get('f'), 10) || 100;
+    cfg.autoscroll = p.get('sc') === '1';
+    saveCfg();
+    // clean the address bar so the saved config wins next time
+    history.replaceState(null, '', location.pathname);
+  }
+})();
+
+function saveCfg() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(cfg)); } catch (e) {}
+}
+
+/* ===== fetch + parse gviz JSON ===== */
+var refreshTimer = null;
+
+function gvizUrl() {
+  var u = 'https://docs.google.com/spreadsheets/d/' + cfg.sheetId +
+          '/gviz/tq?tqx=out:json&headers=0';
+  if (cfg.gid) u += '&gid=' + encodeURIComponent(cfg.gid);
+  return u;
+}
+
+function loadData() {
+  if (!cfg.sheetId) return;
+  setStatus('⏳ กำลังโหลด…');
+  fetch(gvizUrl())
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    })
+    .then(function (text) {
+      var a = text.indexOf('{'), b = text.lastIndexOf('}');
+      if (a < 0 || b < 0) throw new Error('bad response');
+      var json = JSON.parse(text.substring(a, b + 1));
+      if (json.status === 'error') {
+        throw new Error((json.errors && json.errors[0] && json.errors[0].detailed_message) || 'sheet error');
+      }
+      var grid = toGrid(json.table);
+      render(grid);
+      var now = new Date();
+      setStatus('✓ อัปเดต ' + pad(now.getHours()) + ':' + pad(now.getMinutes()));
+    })
+    .catch(function (err) {
+      console.error(err);
+      setStatus('✗ โหลดไม่ได้');
+      var wrap = document.getElementById('tblwrap');
+      if (!wrap.querySelector('table')) {
+        wrap.innerHTML =
+          '<div id="msg"><div class="big">โหลดข้อมูลไม่ได้ ✗</div>' +
+          'เช็คว่าแชร์ชีตเป็น <code>Anyone with the link – Viewer</code> แล้ว<br>' +
+          'และลิงก์ชีตถูกต้อง (กด ⚙️ เพื่อแก้)<br>' +
+          '<small style="color:#999">' + escapeHtml(String(err.message || err)) + '</small></div>';
+      }
+    });
+}
+
+function toGrid(table) {
+  var rows = [];
+  var nCols = table.cols.length;
+  // gviz may put the sheet's first row into column labels — keep it as a row
+  var labels = table.cols.map(function (c) { return (c.label || '').trim(); });
+  if (labels.some(function (l) { return l !== ''; })) rows.push(labels);
+  table.rows.forEach(function (r) {
+    var out = [];
+    for (var i = 0; i < nCols; i++) {
+      var cell = r.c && r.c[i];
+      var val = '';
+      if (cell) {
+        if (cell.f != null) val = cell.f;
+        else if (cell.v != null) val = String(cell.v);
+      }
+      out.push(val);
+    }
+    rows.push(out);
+  });
+  // drop fully-empty trailing rows and columns
+  while (rows.length && rows[rows.length - 1].every(function (c) { return c === ''; })) rows.pop();
+  var lastUsed = 0;
+  rows.forEach(function (r) {
+    for (var i = r.length - 1; i >= 0; i--) {
+      if (r[i] !== '') { if (i > lastUsed) lastUsed = i; break; }
+    }
+  });
+  rows = rows.map(function (r) { return r.slice(0, lastUsed + 1); });
+  return rows;
+}
+
+/* ===== render ===== */
+function render(rows) {
+  var wrap = document.getElementById('tblwrap');
+  if (!rows.length) {
+    wrap.innerHTML = '<div id="msg"><div class="big">ชีตว่างเปล่า</div></div>';
+    return;
+  }
+
+  // if the sheet's first row has text only in the first cell → it's a title row
+  var title = cfg.title;
+  if (!title && rows.length > 1 &&
+      rows[0][0] !== '' &&
+      rows[0].slice(1).every(function (c) { return c === ''; })) {
+    title = rows[0][0];
+    rows = rows.slice(1);
+  }
+  document.getElementById('title').textContent = title || 'Sheet TV';
+  document.title = (title || 'Sheet TV') + ' — Sheet TV';
+
+  var header = rows[0];
+  var data = rows.slice(1);
+  var g = Math.max(1, cfg.group | 0);
+
+  function colStyle(i, isHead) {
+    if (i === 0) return '';
+    var grp = Math.floor((i - 1) / g) % PALETTE.length;
+    return 'background:' + (isHead ? PALETTE[grp].head : PALETTE[grp].cell) + ';';
+  }
+
+  var html = '<table><thead><tr>';
+  header.forEach(function (h, i) {
+    html += '<th class="c' + i + '" style="' + colStyle(i, true) + '">' + escapeHtml(h) + '</th>';
+  });
+  html += '</tr></thead><tbody>';
+  data.forEach(function (r) {
+    html += '<tr>';
+    r.forEach(function (c, i) {
+      var cls = 'c' + i + (i > 0 && /\d/.test(c) && /[₭$€¥฿]|,\d{3}/.test(c) ? ' money' : '');
+      html += '<td class="' + cls + '" style="' + colStyle(i, false) + '">' + escapeHtml(c) + '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+  restartAutoScroll();
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, function (m) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+  });
+}
+function pad(n) { return (n < 10 ? '0' : '') + n; }
+function setStatus(s) { document.getElementById('status').textContent = s; }
+
+/* ===== auto scroll ===== */
+var scrollRAF = null;
+function restartAutoScroll() {
+  if (scrollRAF) { cancelAnimationFrame(scrollRAF); scrollRAF = null; }
+  if (!cfg.autoscroll) return;
+  var wrap = document.getElementById('tblwrap');
+  var dir = 1, pauseUntil = performance.now() + 3000;
+  function step(t) {
+    var max = wrap.scrollHeight - wrap.clientHeight;
+    if (max > 4) {
+      if (t >= pauseUntil) {
+        wrap.scrollTop += dir * 0.6;
+        if (wrap.scrollTop >= max - 1) { dir = -1; pauseUntil = t + 3000; }
+        else if (wrap.scrollTop <= 0 && dir < 0) { dir = 1; pauseUntil = t + 3000; }
+      }
+    }
+    scrollRAF = requestAnimationFrame(step);
+  }
+  scrollRAF = requestAnimationFrame(step);
+}
+
+/* ===== clock ===== */
+function tickClock() {
+  var d = new Date();
+  document.getElementById('clock').textContent =
+    pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() +
+    '  ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+}
+setInterval(tickClock, 1000);
+tickClock();
+
+/* ===== idle cursor / floating buttons ===== */
+var idleTimer = null;
+function poke() {
+  document.body.classList.remove('idle');
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(function () { document.body.classList.add('idle'); }, 4000);
+}
+['mousemove', 'mousedown', 'keydown', 'touchstart'].forEach(function (ev) {
+  document.addEventListener(ev, poke, { passive: true });
+});
+poke();
+
+/* ===== settings panel ===== */
+var overlay = document.getElementById('overlay');
+
+function openPanel() {
+  document.getElementById('inUrl').value = cfg.sheetId
+    ? 'https://docs.google.com/spreadsheets/d/' + cfg.sheetId + '/edit' + (cfg.gid ? '#gid=' + cfg.gid : '')
+    : '';
+  document.getElementById('inTitle').value = cfg.title;
+  document.getElementById('inRefresh').value = cfg.refresh;
+  document.getElementById('inGroup').value = cfg.group;
+  document.getElementById('inFont').value = cfg.font;
+  document.getElementById('fontVal').textContent = cfg.font + '%';
+  document.getElementById('inScroll').checked = cfg.autoscroll;
+  document.getElementById('shareOut').style.display = 'none';
+  overlay.classList.add('show');
+}
+
+function parseSheetUrl(url) {
+  var m = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  if (!m) return null;
+  var gid = '';
+  var gm = url.match(/[#?&]gid=(\d+)/);
+  if (gm) gid = gm[1];
+  return { id: m[1], gid: gid };
+}
+
+function readPanel() {
+  var parsed = parseSheetUrl(document.getElementById('inUrl').value.trim());
+  if (!parsed) {
+    alert('ลิงก์ไม่ถูกต้อง — ต้องเป็นลิงก์ Google Sheet เช่น\nhttps://docs.google.com/spreadsheets/d/xxxx/edit');
+    return false;
+  }
+  cfg.sheetId = parsed.id;
+  cfg.gid = parsed.gid;
+  cfg.title = document.getElementById('inTitle').value.trim();
+  cfg.refresh = Math.max(10, parseInt(document.getElementById('inRefresh').value, 10) || 60);
+  cfg.group = Math.max(1, parseInt(document.getElementById('inGroup').value, 10) || 2);
+  cfg.font = parseInt(document.getElementById('inFont').value, 10) || 100;
+  cfg.autoscroll = document.getElementById('inScroll').checked;
+  saveCfg();
+  return true;
+}
+
+document.getElementById('gearBtn').addEventListener('click', openPanel);
+document.getElementById('closeBtn').addEventListener('click', function () {
+  overlay.classList.remove('show');
+});
+document.getElementById('saveBtn').addEventListener('click', function () {
+  if (!readPanel()) return;
+  overlay.classList.remove('show');
+  applyCfg();
+});
+document.getElementById('inFont').addEventListener('input', function () {
+  document.getElementById('fontVal').textContent = this.value + '%';
+  document.documentElement.style.setProperty('--fontscale', this.value / 100);
+});
+document.getElementById('reloadBtn').addEventListener('click', loadData);
+document.getElementById('fsBtn').addEventListener('click', function () {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(function () {});
+});
+
+/* share link (+ auto shorten like tab-tv) */
+document.getElementById('shareBtn').addEventListener('click', function () {
+  if (!readPanel()) return;
+  var p = new URLSearchParams();
+  p.set('s', cfg.sheetId);
+  if (cfg.gid) p.set('gid', cfg.gid);
+  if (cfg.title) p.set('t', cfg.title);
+  p.set('r', cfg.refresh);
+  p.set('g', cfg.group);
+  p.set('f', cfg.font);
+  if (cfg.autoscroll) p.set('sc', '1');
+  var long = location.origin + location.pathname + '?' + p.toString();
+  var out = document.getElementById('shareOut');
+  out.style.display = 'block';
+  out.textContent = '⏳ กำลังย่อลิงก์…';
+  fetch('https://da.gd/shorten?url=' + encodeURIComponent(long))
+    .then(function (r) { return r.ok ? r.text() : Promise.reject(); })
+    .then(function (short) { showShare(short.trim(), long); })
+    .catch(function () { showShare('', long); });
+  function showShare(short, long) {
+    var link = short || long;
+    out.innerHTML = (short ? '<b>ลิงก์สั้น (พิมพ์บน TV ง่าย):</b><br>' : '') +
+      '<a href="' + escapeHtml(link) + '" target="_blank">' + escapeHtml(link) + '</a><br>' +
+      (short ? '<span style="color:#888">ลิงก์เต็ม: ' + escapeHtml(long) + '</span>' : '');
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(link).then(function () {
+        out.innerHTML += '<br><b style="color:#0d9488">✓ ก๊อปปี้แล้ว</b>';
+      }).catch(function () {});
+    }
+  }
+});
+
+/* ===== apply + start ===== */
+function applyCfg() {
+  document.documentElement.style.setProperty('--fontscale', cfg.font / 100);
+  if (cfg.title) document.getElementById('title').textContent = cfg.title;
+  clearInterval(refreshTimer);
+  if (cfg.sheetId) {
+    loadData();
+    refreshTimer = setInterval(loadData, Math.max(10, cfg.refresh) * 1000);
+  } else {
+    setStatus('ยังไม่ได้ตั้งค่า');
+  }
+  restartAutoScroll();
+}
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden && cfg.sheetId) loadData();
+});
+applyCfg();
+if (!cfg.sheetId) openPanel();
+</script>
+</body>
+</html>
