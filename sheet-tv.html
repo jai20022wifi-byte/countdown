@@ -377,6 +377,8 @@ var cfg = {
 try {
   var saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
   if (saved) cfg = Object.assign(cfg, saved);
+  // เวอร์ชันก่อนเคยตั้งค่าเริ่มต้นเป็น "การ์ด" — รีเซ็ตกลับเป็นตารางครั้งเดียว
+  if (!cfg.m1) { cfg.view = 'table'; cfg.m1 = true; saveCfg(); }
 } catch (e) {}
 
 (function readParams() {
