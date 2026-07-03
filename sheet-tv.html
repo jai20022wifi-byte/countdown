@@ -77,9 +77,13 @@
     font-size: calc(21px * var(--fontscale));
     background: #fff;
     border-radius: calc(16px * var(--fontscale));
-    overflow: hidden;
     box-shadow: 0 6px 24px rgba(15,23,42,.08);
   }
+  /* มุมโค้งที่เซลล์มุมแทน overflow:hidden — ไม่งั้นหัวตาราง sticky ไม่ทำงาน */
+  thead th:first-child { border-top-left-radius: calc(16px * var(--fontscale)); }
+  thead th:last-child { border-top-right-radius: calc(16px * var(--fontscale)); }
+  tbody tr:last-child td:first-child { border-bottom-left-radius: calc(16px * var(--fontscale)); }
+  tbody tr:last-child td:last-child { border-bottom-right-radius: calc(16px * var(--fontscale)); }
   th, td {
     padding: calc(9px * var(--fontscale)) calc(14px * var(--fontscale));
     text-align: center;
@@ -376,7 +380,7 @@ var DEFAULT_SHEET_ID = '1zgZHS6714mK-oDgYxElO5yr4Mf1P4Zv4J72X6YGmO6Q';
 var DEFAULT_GID = '0';
 var cfg = {
   sheetId: DEFAULT_SHEET_ID, gid: DEFAULT_GID, title: '',
-  refresh: 60, group: 2, font: 100, autoscroll: false, view: 'table'
+  refresh: 60, group: 2, font: 100, autoscroll: true, view: 'table'
 };
 
 /* ===== load config: URL params override saved config ===== */
@@ -385,6 +389,8 @@ try {
   if (saved) cfg = Object.assign(cfg, saved);
   // เวอร์ชันก่อนเคยตั้งค่าเริ่มต้นเป็น "การ์ด" — รีเซ็ตกลับเป็นตารางครั้งเดียว
   if (!cfg.m1) { cfg.view = 'table'; cfg.m1 = true; saveCfg(); }
+  // เปิดเลื่อนจออัตโนมัติให้เครื่องเก่าครั้งเดียว (ค่าเริ่มต้นใหม่)
+  if (!cfg.m2) { cfg.autoscroll = true; cfg.m2 = true; saveCfg(); }
 } catch (e) {}
 // เครื่องที่ยังไม่เคยตั้งชีตเอง → ใช้ชีตเริ่มต้น
 if (!cfg.sheetId) { cfg.sheetId = DEFAULT_SHEET_ID; cfg.gid = DEFAULT_GID; }
@@ -629,14 +635,16 @@ function restartAutoScroll() {
   if (scrollRAF) { cancelAnimationFrame(scrollRAF); scrollRAF = null; }
   if (!cfg.autoscroll) return;
   var wrap = document.getElementById('content');
-  var dir = 1, pauseUntil = performance.now() + 3000;
+  // เก็บตำแหน่งทศนิยมเอง — บวก scrollTop ตรงๆ ทีละ 0.4px จะถูกเบราว์เซอร์ปัดทิ้ง
+  var dir = 1, pauseUntil = performance.now() + 4000, pos = wrap.scrollTop;
   function step(t) {
     var max = wrap.scrollHeight - wrap.clientHeight;
     if (max > 4) {
       if (t >= pauseUntil) {
-        wrap.scrollTop += dir * 0.6;
-        if (wrap.scrollTop >= max - 1) { dir = -1; pauseUntil = t + 3000; }
-        else if (wrap.scrollTop <= 0 && dir < 0) { dir = 1; pauseUntil = t + 3000; }
+        pos += dir * 0.4;
+        if (pos >= max) { pos = max; dir = -1; pauseUntil = t + 4000; }
+        else if (pos <= 0 && dir < 0) { pos = 0; dir = 1; pauseUntil = t + 4000; }
+        wrap.scrollTop = pos;
       }
     }
     scrollRAF = requestAnimationFrame(step);
