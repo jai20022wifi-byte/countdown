@@ -8,191 +8,76 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
     --fontscale: 1;
-    --bg: #0d1420;
-    --card: #17212f;
-    --card2: #1c2938;
-    --line: #263646;
-    --text: #eef3f8;
-    --muted: #8b9bab;
+    --bg: #eef2f7;
+    --text: #0f172a;
+    --muted: #64748b;
+    --line: #e2e8f0;
   }
   html, body { height: 100%; }
   body {
     font-family: "Segoe UI", "Leelawadee UI", "Noto Sans Lao", Tahoma, sans-serif;
-    background:
-      radial-gradient(1200px 600px at 80% -10%, rgba(220,38,38,.14), transparent 60%),
-      radial-gradient(900px 500px at -10% 110%, rgba(37,99,235,.12), transparent 60%),
-      var(--bg);
+    background: linear-gradient(180deg, #e8edf5, #f4f6fa 40%);
     color: var(--text);
     display: flex;
     flex-direction: column;
     height: 100vh;
     overflow: hidden;
+    padding: calc(14px * var(--fontscale));
+    gap: calc(12px * var(--fontscale));
   }
   body.idle { cursor: none; }
 
-  /* ===== Header ===== */
+  /* ===== Title bar ===== */
   #titlebar {
+    background: linear-gradient(135deg, #ef4444, #b91c1c);
+    color: #fff;
     display: flex;
     align-items: center;
     gap: 16px;
-    padding: calc(14px * var(--fontscale)) calc(24px * var(--fontscale));
+    padding: calc(12px * var(--fontscale)) calc(22px * var(--fontscale));
     flex-shrink: 0;
-  }
-  #titlebar .accent {
-    width: 8px;
-    align-self: stretch;
-    border-radius: 4px;
-    background: linear-gradient(180deg, #f87171, #dc2626);
-    box-shadow: 0 0 18px rgba(220,38,38,.5);
+    border-radius: calc(16px * var(--fontscale));
+    box-shadow: 0 8px 20px rgba(185,28,28,.28);
   }
   #titlewrap { flex: 1; min-width: 0; }
   #title {
-    font-size: calc(34px * var(--fontscale));
+    font-size: calc(32px * var(--fontscale));
     font-weight: 800;
     letter-spacing: .5px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     line-height: 1.2;
+    text-shadow: 0 2px 6px rgba(0,0,0,.25);
   }
   #status {
-    font-size: calc(14px * var(--fontscale));
-    color: var(--muted);
-    margin-top: 2px;
+    font-size: calc(13.5px * var(--fontscale));
+    opacity: .9;
+    margin-top: 1px;
   }
   #clockwrap { text-align: right; flex-shrink: 0; }
   #clock {
-    font-size: calc(30px * var(--fontscale));
+    font-size: calc(28px * var(--fontscale));
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     line-height: 1.15;
   }
-  #date {
-    font-size: calc(14px * var(--fontscale));
-    color: var(--muted);
-  }
+  #date { font-size: calc(13.5px * var(--fontscale)); opacity: .9; }
 
   /* ===== Content ===== */
-  #content {
-    flex: 1;
-    overflow: auto;
-    padding: 0 calc(20px * var(--fontscale)) calc(20px * var(--fontscale));
-  }
+  #content { flex: 1; overflow: auto; border-radius: calc(16px * var(--fontscale)); }
   #content::-webkit-scrollbar { width: 0; height: 0; }
 
-  /* ---- card grid ---- */
-  #grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(calc(330px * var(--fontscale)), 1fr));
-    gap: calc(14px * var(--fontscale));
-  }
-  .card {
-    background: linear-gradient(160deg, var(--card2), var(--card));
-    border: 1px solid var(--line);
-    border-radius: calc(16px * var(--fontscale));
-    padding: calc(14px * var(--fontscale)) calc(16px * var(--fontscale));
-    box-shadow: 0 4px 14px rgba(0,0,0,.35);
-    display: flex;
-    flex-direction: column;
-    gap: calc(10px * var(--fontscale));
-    min-width: 0;
-  }
-  .card .name {
-    font-size: calc(23px * var(--fontscale));
-    font-weight: 700;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: calc(8px * var(--fontscale));
-  }
-  .chip {
-    flex: 1 1 calc(130px * var(--fontscale));
-    min-width: 0;
-    border-radius: calc(12px * var(--fontscale));
-    padding: calc(8px * var(--fontscale)) calc(12px * var(--fontscale));
-    border: 1px solid;
-  }
-  .chip .lbl {
-    font-size: calc(12px * var(--fontscale));
-    font-weight: 700;
-    opacity: .9;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .chip .amt {
-    font-size: calc(22px * var(--fontscale));
-    font-weight: 800;
-    color: var(--text);
-    margin-top: 2px;
-    white-space: nowrap;
-    font-variant-numeric: tabular-nums;
-  }
-  .chip .sub {
-    font-size: calc(12.5px * var(--fontscale));
-    color: var(--muted);
-    margin-top: 1px;
-    white-space: nowrap;
-  }
-  .chip .sub .today {
-    color: #4ade80;
-    font-weight: 700;
-  }
-  .none {
-    font-size: calc(15px * var(--fontscale));
-    color: #55677a;
-  }
-  /* team colors */
-  .t0 { background: rgba(96,165,250,.13);  border-color: rgba(96,165,250,.40); }
-  .t0 .lbl { color: #7db5f8; }
-  .t1 { background: rgba(244,114,182,.12); border-color: rgba(244,114,182,.40); }
-  .t1 .lbl { color: #f191c4; }
-  .t2 { background: rgba(251,191,36,.12);  border-color: rgba(251,191,36,.40); }
-  .t2 .lbl { color: #fbcf5c; }
-  .t3 { background: rgba(74,222,128,.12);  border-color: rgba(74,222,128,.40); }
-  .t3 .lbl { color: #6ee79a; }
-  .t4 { background: rgba(167,139,250,.13); border-color: rgba(167,139,250,.42); }
-  .t4 .lbl { color: #b9a3fb; }
-
-  /* legend under header */
-  #legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: calc(10px * var(--fontscale));
-    padding: 0 calc(24px * var(--fontscale)) calc(12px * var(--fontscale));
-    flex-shrink: 0;
-  }
-  #legend .key {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    font-size: calc(14px * var(--fontscale));
-    color: var(--muted);
-    background: rgba(255,255,255,.04);
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    padding: calc(4px * var(--fontscale)) calc(12px * var(--fontscale));
-    white-space: nowrap;
-  }
-  #legend .dot { width: 10px; height: 10px; border-radius: 50%; }
-  .d0 { background: #60a5fa; } .d1 { background: #f472b6; }
-  .d2 { background: #fbbf24; } .d3 { background: #4ade80; }
-  .d4 { background: #a78bfa; }
-
-  /* ---- table mode ---- */
+  /* ---- table ---- */
   table {
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
-    font-size: calc(20px * var(--fontscale));
-    background: var(--card);
-    border-radius: 14px;
+    font-size: calc(21px * var(--fontscale));
+    background: #fff;
+    border-radius: calc(16px * var(--fontscale));
     overflow: hidden;
-    border: 1px solid var(--line);
+    box-shadow: 0 6px 24px rgba(15,23,42,.08);
   }
   th, td {
     padding: calc(9px * var(--fontscale)) calc(14px * var(--fontscale));
@@ -200,19 +85,99 @@
     white-space: nowrap;
     border-bottom: 1px solid var(--line);
   }
+  td + td, th + th { border-left: 1px solid rgba(15,23,42,.05); }
   thead th {
     position: sticky; top: 0; z-index: 2;
-    font-weight: 700;
-    background: #223142;
+    font-weight: 800;
+    font-size: calc(18px * var(--fontscale));
+    padding-top: calc(12px * var(--fontscale));
+    padding-bottom: calc(12px * var(--fontscale));
+    background: #f8fafc;
+    color: #334155;
+    border-bottom: 2px solid #cbd5e1;
   }
-  tbody tr:nth-child(even) td { background: rgba(255,255,255,.025); }
-  td.c0, th.c0 { text-align: left; font-weight: 600; }
+  td.c0, th.c0 { text-align: left; }
+  td.c0 {
+    font-weight: 700;
+    background: #fff;
+    padding-left: calc(20px * var(--fontscale));
+  }
+  th.c0 { padding-left: calc(20px * var(--fontscale)); }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) td {
+    background-image: linear-gradient(rgba(15,23,42,.028), rgba(15,23,42,.028));
+  }
   td.money { font-weight: 800; font-variant-numeric: tabular-nums; }
-  .tm0 { color: #7db5f8; } .tm1 { color: #f191c4; } .tm2 { color: #fbcf5c; }
-  .tm3 { color: #6ee79a; } .tm4 { color: #b9a3fb; }
-  td.dim { color: var(--muted); font-size: calc(16px * var(--fontscale)); }
+  td.datecell { color: var(--muted); font-size: calc(17px * var(--fontscale)); }
+  .today {
+    color: #16a34a;
+    font-weight: 700;
+    font-size: calc(14px * var(--fontscale));
+    white-space: nowrap;
+  }
+
+  /* team group colors: header / cell / accent text */
+  .h0 { background: #dbeafe !important; color: #1e40af !important; }
+  .g0 { background: #eff6ff; } .a0 { color: #1d4ed8; }
+  .h1 { background: #fce7f3 !important; color: #9d174d !important; }
+  .g1 { background: #fdf2f8; } .a1 { color: #be185d; }
+  .h2 { background: #fef3c7 !important; color: #92400e !important; }
+  .g2 { background: #fffbeb; } .a2 { color: #b45309; }
+  .h3 { background: #dcfce7 !important; color: #166534 !important; }
+  .g3 { background: #f0fdf4; } .a3 { color: #15803d; }
+  .h4 { background: #ede9fe !important; color: #5b21b6 !important; }
+  .g4 { background: #f5f3ff; } .a4 { color: #6d28d9; }
+
+  /* ---- cards (โหมดเสริม) ---- */
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(calc(330px * var(--fontscale)), 1fr));
+    gap: calc(14px * var(--fontscale));
+  }
+  .card {
+    background: #fff;
+    border-radius: calc(16px * var(--fontscale));
+    padding: calc(14px * var(--fontscale)) calc(16px * var(--fontscale));
+    box-shadow: 0 4px 16px rgba(15,23,42,.08);
+    display: flex;
+    flex-direction: column;
+    gap: calc(10px * var(--fontscale));
+    min-width: 0;
+  }
+  .card .name {
+    font-size: calc(23px * var(--fontscale));
+    font-weight: 800;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: calc(8px * var(--fontscale)); }
+  .chip {
+    flex: 1 1 calc(130px * var(--fontscale));
+    min-width: 0;
+    border-radius: calc(12px * var(--fontscale));
+    padding: calc(8px * var(--fontscale)) calc(12px * var(--fontscale));
+  }
+  .chip .lbl {
+    font-size: calc(12px * var(--fontscale));
+    font-weight: 800;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .chip .amt {
+    font-size: calc(22px * var(--fontscale));
+    font-weight: 800;
+    margin-top: 2px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+  }
+  .chip .sub { font-size: calc(12.5px * var(--fontscale)); color: var(--muted); margin-top: 1px; white-space: nowrap; }
+  .none { font-size: calc(15px * var(--fontscale)); color: #94a3b8; }
 
   #msg {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 6px 24px rgba(15,23,42,.08);
     padding: 60px 20px;
     text-align: center;
     font-size: 20px;
@@ -220,12 +185,12 @@
     line-height: 1.9;
   }
   #msg .big { font-size: 28px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
-  #msg code { background: rgba(255,255,255,.08); padding: 2px 8px; border-radius: 4px; }
+  #msg code { background: #f1f5f9; padding: 2px 8px; border-radius: 4px; }
 
   /* ===== Floating buttons ===== */
   #fabs {
     position: fixed;
-    top: 12px; right: 12px;
+    top: 22px; right: 26px;
     display: flex;
     gap: 8px;
     z-index: 50;
@@ -235,20 +200,21 @@
   }
   body:not(.idle) #fabs { opacity: 1; pointer-events: auto; }
   .fab {
-    background: rgba(15,23,36,.85);
-    color: #fff;
+    background: rgba(255,255,255,.92);
+    color: #0f172a;
     border: 1px solid var(--line);
     border-radius: 10px;
     width: 44px; height: 44px;
     font-size: 20px;
     cursor: pointer;
+    box-shadow: 0 2px 8px rgba(15,23,42,.15);
   }
-  .fab:hover { background: #2b3c50; }
+  .fab:hover { background: #fff; }
 
   /* ===== Settings panel ===== */
   #overlay {
     position: fixed; inset: 0;
-    background: rgba(0,0,0,.6);
+    background: rgba(15,23,42,.55);
     display: none;
     align-items: flex-start;
     justify-content: center;
@@ -316,7 +282,6 @@
 <body>
 
 <div id="titlebar">
-  <div class="accent"></div>
   <div id="titlewrap">
     <div id="title">Sheet TV</div>
     <div id="status">…</div>
@@ -326,7 +291,6 @@
     <div id="date"></div>
   </div>
 </div>
-<div id="legend"></div>
 <div id="content">
   <div id="msg">
     <div class="big">ยังไม่ได้ตั้งค่า Google Sheet</div>
@@ -355,8 +319,8 @@
       <div>
         <label>รูปแบบการแสดง</label>
         <select id="inView">
-          <option value="cards">การ์ด (สวย เหมาะกับ TV)</option>
-          <option value="table">ตารางเหมือนชีต</option>
+          <option value="table">ตาราง (เหมือนชีต)</option>
+          <option value="cards">การ์ด</option>
         </select>
       </div>
       <div>
@@ -400,12 +364,13 @@
 <script>
 'use strict';
 
-var NTEAMS = 5; // จำนวนสีทีมที่มีใน CSS (.t0–.t4)
+var NTEAMS = 5; // จำนวนชุดสีทีมใน CSS (.h0/.g0/.a0 – .h4/.g4/.a4)
+var CHIP_BG = ['#eff6ff', '#fdf2f8', '#fffbeb', '#f0fdf4', '#f5f3ff'];
 
 var LS_KEY = 'sheet-tv-config-v1';
 var cfg = {
   sheetId: '', gid: '', title: '',
-  refresh: 60, group: 2, font: 100, autoscroll: false, view: 'cards'
+  refresh: 60, group: 2, font: 100, autoscroll: false, view: 'table'
 };
 
 /* ===== load config: URL params override saved config ===== */
@@ -424,7 +389,7 @@ try {
     if (p.get('g')) cfg.group = parseInt(p.get('g'), 10) || 2;
     if (p.get('f')) cfg.font = parseInt(p.get('f'), 10) || 100;
     cfg.autoscroll = p.get('sc') === '1';
-    if (p.get('v')) cfg.view = p.get('v') === 'table' ? 'table' : 'cards';
+    if (p.get('v')) cfg.view = p.get('v') === 'cards' ? 'cards' : 'table';
     saveCfg();
     history.replaceState(null, '', location.pathname);
   }
@@ -467,7 +432,7 @@ function loadData() {
       console.error(err);
       setStatus('✗ โหลดไม่ได้ — จะลองใหม่อัตโนมัติ');
       var wrap = document.getElementById('content');
-      if (!wrap.querySelector('.card') && !wrap.querySelector('table')) {
+      if (!wrap.querySelector('table') && !wrap.querySelector('.card')) {
         wrap.innerHTML =
           '<div id="msg"><div class="big">โหลดข้อมูลไม่ได้ ✗</div>' +
           'เช็คว่าแชร์ชีตเป็น <code>Anyone with the link – Viewer</code> แล้ว<br>' +
@@ -520,10 +485,8 @@ function isToday(d) {
 
 function render(rows) {
   var wrap = document.getElementById('content');
-  var legend = document.getElementById('legend');
   if (!rows.length) {
     wrap.innerHTML = '<div id="msg"><div class="big">ชีตว่างเปล่า</div></div>';
-    legend.innerHTML = '';
     return;
   }
 
@@ -541,28 +504,48 @@ function render(rows) {
   var header = rows[0];
   var data = rows.slice(1);
   var g = Math.max(1, cfg.group | 0);
-  var nGroups = Math.max(0, Math.ceil((header.length - 1) / g));
 
-  // ชื่อทีม = หัวคอลัมน์แรกของแต่ละกลุ่ม
+  if (cfg.view === 'cards') renderCards(wrap, header, data, g);
+  else renderTable(wrap, header, data, g);
+  restartAutoScroll();
+}
+
+function renderTable(wrap, header, data, g) {
+  function grp(i) { return Math.floor((i - 1) / g) % NTEAMS; }
+  var html = '<table><thead><tr>';
+  header.forEach(function (h, i) {
+    var cls = 'c' + i + (i > 0 ? ' h' + grp(i) : '');
+    html += '<th class="' + cls + '">' + escapeHtml(h.t) + '</th>';
+  });
+  html += '</tr></thead><tbody>';
+  data.forEach(function (r) {
+    html += '<tr>';
+    r.forEach(function (c, i) {
+      var cls = 'c' + i, inner = escapeHtml(c.t);
+      if (i > 0) {
+        cls += ' g' + grp(i);
+        if (c.d) {
+          cls += ' datecell';
+          if (isToday(c.d)) inner += ' <span class="today">● วันนี้</span>';
+        } else if (/\d/.test(c.t)) {
+          cls += ' money a' + grp(i);
+        }
+      }
+      html += '<td class="' + cls + '">' + inner + '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function renderCards(wrap, header, data, g) {
+  var nGroups = Math.max(0, Math.ceil((header.length - 1) / g));
   var teams = [];
   for (var k = 0; k < nGroups; k++) {
     var h = header[1 + k * g] ? header[1 + k * g].t : '';
     teams.push(h || ('คอลัมน์ ' + (2 + k * g)));
   }
-
-  if (cfg.view === 'table') {
-    legend.innerHTML = '';
-    renderTable(wrap, header, data, g);
-  } else {
-    legend.innerHTML = teams.map(function (name, k) {
-      return '<div class="key"><span class="dot d' + (k % NTEAMS) + '"></span>' + escapeHtml(name) + '</div>';
-    }).join('');
-    renderCards(wrap, data, teams, g);
-  }
-  restartAutoScroll();
-}
-
-function renderCards(wrap, data, teams, g) {
   var html = '<div id="grid">';
   data.forEach(function (r) {
     if (!r[0] || r[0].t === '') return;
@@ -578,8 +561,9 @@ function renderCards(wrap, data, teams, g) {
         else subs.push(c.t);
         if (c.d && isToday(c.d)) today = true;
       });
-      chips += '<div class="chip t' + (k % NTEAMS) + '">' +
-        '<div class="lbl">' + escapeHtml(name) + '</div>' +
+      var ki = k % NTEAMS;
+      chips += '<div class="chip" style="background:' + CHIP_BG[ki] + '">' +
+        '<div class="lbl a' + ki + '">' + escapeHtml(name) + '</div>' +
         '<div class="amt">' + escapeHtml(main) + '</div>' +
         (subs.length || today
           ? '<div class="sub">' + escapeHtml(subs.join(' · ')) +
@@ -593,32 +577,6 @@ function renderCards(wrap, data, teams, g) {
     html += '</div>';
   });
   html += '</div>';
-  wrap.innerHTML = html;
-}
-
-function renderTable(wrap, header, data, g) {
-  function teamClass(i) {
-    if (i === 0) return '';
-    return ' tm' + (Math.floor((i - 1) / g) % NTEAMS);
-  }
-  var html = '<table><thead><tr>';
-  header.forEach(function (h, i) {
-    html += '<th class="c' + i + teamClass(i) + '">' + escapeHtml(h.t) + '</th>';
-  });
-  html += '</tr></thead><tbody>';
-  data.forEach(function (r) {
-    html += '<tr>';
-    r.forEach(function (c, i) {
-      var cls = 'c' + i;
-      if (i > 0) {
-        if (c.d) cls += ' dim';
-        else if (/\d/.test(c.t)) cls += ' money' + teamClass(i);
-      }
-      html += '<td class="' + cls + '">' + escapeHtml(c.t) + '</td>';
-    });
-    html += '</tr>';
-  });
-  html += '</tbody></table>';
   wrap.innerHTML = html;
 }
 
