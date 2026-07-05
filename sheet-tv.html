@@ -419,8 +419,10 @@ function saveCfg() {
 var refreshTimer = null;
 
 function gvizUrl() {
+  // headers=1: แถวแรกของชีตเป็นหัวตาราง — gviz จะส่งข้อความหัวคอลัมน์มาครบ
+  // (ถ้าใช้ headers=0 ข้อความหัวคอลัมน์ในคอลัมน์ตัวเลข/วันที่จะถูกตัดทิ้งเป็นค่าว่าง)
   var u = 'https://docs.google.com/spreadsheets/d/' + cfg.sheetId +
-          '/gviz/tq?tqx=out:json&headers=0';
+          '/gviz/tq?tqx=out:json&headers=1';
   if (cfg.gid) u += '&gid=' + encodeURIComponent(cfg.gid);
   return u;
 }
