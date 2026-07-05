@@ -16,7 +16,10 @@
   html, body { height: 100%; }
   body {
     font-family: "Segoe UI", "Leelawadee UI", "Noto Sans Lao", Tahoma, sans-serif;
-    background: linear-gradient(180deg, #e8edf5, #f4f6fa 40%);
+    background:
+      linear-gradient(rgba(25,10,25,.40), rgba(25,10,25,.40)),
+      url('sheet-tv-bg.jpg') center / cover no-repeat fixed,
+      linear-gradient(180deg, #e8edf5, #f4f6fa 40%);
     color: var(--text);
     display: flex;
     flex-direction: column;
@@ -75,9 +78,11 @@
     border-collapse: separate;
     border-spacing: 0;
     font-size: calc(21px * var(--fontscale));
-    background: #fff;
+    background: rgba(255,255,255,.30);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
     border-radius: calc(16px * var(--fontscale));
-    box-shadow: 0 6px 24px rgba(15,23,42,.08);
+    box-shadow: 0 10px 30px rgba(15,23,42,.35);
   }
   /* มุมโค้งที่เซลล์มุมแทน overflow:hidden — ไม่งั้นหัวตาราง sticky ไม่ทำงาน */
   thead th:first-child { border-top-left-radius: calc(16px * var(--fontscale)); }
@@ -106,7 +111,7 @@
   td.c0, th.c0 { text-align: left; }
   td.c0 {
     font-weight: 700;
-    background: #fff;
+    background: rgba(255,255,255,.22);
     padding-left: calc(20px * var(--fontscale));
   }
   th.c0 { padding-left: calc(20px * var(--fontscale)); }
@@ -115,7 +120,7 @@
     background-image: linear-gradient(rgba(15,23,42,.028), rgba(15,23,42,.028));
   }
   td.money { font-weight: 800; font-variant-numeric: tabular-nums; }
-  td.datecell { color: var(--muted); font-size: calc(17px * var(--fontscale)); }
+  td.datecell { color: #475569; font-size: calc(17px * var(--fontscale)); }
   .today {
     color: #16a34a;
     font-weight: 700;
@@ -125,15 +130,15 @@
 
   /* team group colors: header / cell / accent text */
   .h0 { background: #dbeafe !important; color: #1e40af !important; }
-  .g0 { background: #eff6ff; } .a0 { color: #1d4ed8; }
+  .g0 { background: rgba(239,246,255,.40); } .a0 { color: #1d4ed8; }
   .h1 { background: #fce7f3 !important; color: #9d174d !important; }
-  .g1 { background: #fdf2f8; } .a1 { color: #be185d; }
+  .g1 { background: rgba(253,242,248,.40); } .a1 { color: #be185d; }
   .h2 { background: #fef3c7 !important; color: #92400e !important; }
-  .g2 { background: #fffbeb; } .a2 { color: #b45309; }
+  .g2 { background: rgba(255,251,235,.40); } .a2 { color: #b45309; }
   .h3 { background: #dcfce7 !important; color: #166534 !important; }
-  .g3 { background: #f0fdf4; } .a3 { color: #15803d; }
+  .g3 { background: rgba(240,253,244,.40); } .a3 { color: #15803d; }
   .h4 { background: #ede9fe !important; color: #5b21b6 !important; }
-  .g4 { background: #f5f3ff; } .a4 { color: #6d28d9; }
+  .g4 { background: rgba(245,243,255,.40); } .a4 { color: #6d28d9; }
 
   /* ---- cards (โหมดเสริม) ---- */
   #grid {
