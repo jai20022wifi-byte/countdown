@@ -116,7 +116,6 @@
   }
   td.money { font-weight: 800; font-variant-numeric: tabular-nums; }
   td.datecell { color: var(--muted); font-size: calc(17px * var(--fontscale)); }
-  td.datecell.fresh { color: #16a34a; font-weight: 800; }
   .today {
     color: #16a34a;
     font-weight: 700;
@@ -589,7 +588,6 @@ function renderTable(wrap, header, data, g) {
         if (c.d) {
           cls += ' datecell';
           inner = escapeHtml(dayText(c));
-          if (isToday(c.d)) cls += ' fresh';
         } else if (/\d/.test(c.t)) {
           cls += ' money a' + grp(i);
         }
