@@ -116,6 +116,7 @@
   }
   td.money { font-weight: 800; font-variant-numeric: tabular-nums; }
   td.datecell { color: var(--muted); font-size: calc(17px * var(--fontscale)); }
+  td.datecell.fresh { color: #16a34a; font-weight: 800; }
   .today {
     color: #16a34a;
     font-weight: 700;
@@ -501,6 +502,16 @@ function isToday(d) {
   return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
 }
 
+/* วันที่ → "NN ວັນຫລັງ" นับรวมวันนั้น (7/1 → วันนี้ 7/5 = "05 ວັນຫລັງ") */
+function dayText(c) {
+  var n = new Date();
+  var today = new Date(n.getFullYear(), n.getMonth(), n.getDate());
+  var d0 = new Date(c.d.getFullYear(), c.d.getMonth(), c.d.getDate());
+  var diff = Math.round((today - d0) / 86400000) + 1;
+  if (diff < 1) return c.t; // วันในอนาคต — แสดงตามชีต
+  return (diff < 10 ? '0' + diff : String(diff)) + ' ວັນຫລັງ';
+}
+
 function render(rows) {
   var wrap = document.getElementById('content');
   if (!rows.length) {
@@ -569,7 +580,8 @@ function renderTable(wrap, header, data, g) {
         cls += ' g' + grp(i);
         if (c.d) {
           cls += ' datecell';
-          if (isToday(c.d)) inner += ' <span class="today">● วันนี้</span>';
+          inner = escapeHtml(dayText(c));
+          if (isToday(c.d)) cls += ' fresh';
         } else if (/\d/.test(c.t)) {
           cls += ' money a' + grp(i);
         }
@@ -600,8 +612,9 @@ function renderCards(wrap, header, data, g) {
       var main = '', subs = [], today = false;
       cells.forEach(function (c) {
         if (!c || c.t === '') return;
-        if (main === '') main = c.t;
-        else subs.push(c.t);
+        var txt = c.d ? dayText(c) : c.t;
+        if (main === '') main = txt;
+        else subs.push(txt);
         if (c.d && isToday(c.d)) today = true;
       });
       var ki = k % NTEAMS;
