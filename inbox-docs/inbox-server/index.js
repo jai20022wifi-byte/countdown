@@ -77,7 +77,7 @@ const MULTI = t => t === 'income' || t === 'payment' || t === 'expense';
 const sg = d => d.stage ?? (d.type === 'expense' ? 0 : 1);
 function canApprove(u, d) { const p = u.perms || {};
   if (d.status === 'approved') return !!p.manageApproved;
-  if (MULTI(d.type)) return !!p[d.status === 'pending' ? ({ 0: 'approveExpense', 1: 'rpCheck', 2: 'rpAccount', 3: 'rpPresident' }[sg(d)]) : 'rpPresident'];
+  if (MULTI(d.type)) return !!p[d.status === 'pending' ? ({ 0: 'approveExpense', 1: 'rpAccount', 2: 'rpCheck', 3: 'rpPresident' }[sg(d)]) : 'rpPresident'];
   return d.type === 'quote' ? !!p.approveQuote : !!p.approveExpense; }
 async function getDoc(id) { const r = await q('select data from docs where id=$1', [String(id)]); return r[0] ? r[0].data : null; }
 async function putDoc(d) {
@@ -191,8 +191,8 @@ const API = {
   async deleteDoc(r) {
     const me = await auth(r), d = await getDoc(r.id);
     if (!d) return true;
-    const ok = d.status === 'approved' ? canApprove(me, d) : (me.perms.edit || (d.createdBy === me.id && d.status === 'draft'));
-    if (!ok) throw new Error('ບໍ່ມີສິດລຶບ');
+    const ok = ['draft', 'returned'].includes(d.status) && (me.perms.edit || d.createdBy === me.id);
+    if (!ok) throw new Error('ລຶບໄດ້ສະເພາະເອກະສານ ຮ່າງ ຫຼື ສົ່ງກັບແກ້ໄຂ');
     await q('delete from docs where id=$1', [String(d.id)]); dropPdf(String(d.id)); return true;
   },
   async setTransfer(r) {
