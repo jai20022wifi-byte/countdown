@@ -1,7 +1,7 @@
 // INBOX app shell. The page itself is fetched fresh first (falls back to the device copy when offline),
 // so a new upload on GitHub shows on the next open. Libraries and icons open from the device cache.
 // Calls to Google (Apps Script, Drive) are never cached here.
-const CACHE = 'inbox-shell-v3';
+const CACHE = 'inbox-shell-v4';
 const SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
@@ -25,7 +25,8 @@ self.addEventListener('fetch', e => {
 // Web Push: show the notification; tapping it opens (or focuses) the app on that document.
 self.addEventListener('push', e => {
   let d = {}; try { d = e.data.json(); } catch (x) { d = { title: 'INBOX', body: e.data ? e.data.text() : '' }; }
-  e.waitUntil(self.registration.showNotification(d.title || 'INBOX', { body: d.body || '', icon: './icon-192.png', badge: './icon-192.png', tag: d.tag, renotify: !!d.tag, data: { url: d.url || './', doc: d.doc } }));
+  const setBadge = typeof d.badge === 'number' && self.navigator.setAppBadge ? (d.badge ? self.navigator.setAppBadge(d.badge) : self.navigator.clearAppBadge()).catch(() => {}) : Promise.resolve();
+  e.waitUntil(Promise.all([setBadge, self.registration.showNotification(d.title || 'INBOX', { body: d.body || '', icon: './icon-192.png', badge: './icon-192.png', tag: d.tag, renotify: !!d.tag, data: { url: d.url || './', doc: d.doc } })]));
 });
 self.addEventListener('notificationclick', e => {
   e.notification.close(); const { url, doc } = e.notification.data || {};
