@@ -5,6 +5,7 @@ const express = require('express');
 const crypto = require('crypto');
 const path = require('path');
 const { Pool } = require('pg');
+const webpush = require('web-push');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 
 const ENV = process.env;
@@ -26,6 +27,9 @@ async function migrate() {
   await q(`create table if not exists fx (id text primary key, no text, date text, by_id text, sort bigserial, data jsonb)`);
   await q(`create table if not exists fx_drafts (user_id text primary key, data jsonb)`);
   await q(`create table if not exists pdfs (doc_id text primary key, file_id text)`);
+  await q(`create table if not exists push_subs (endpoint text primary key, user_id text, sub jsonb)`);
+  let v = await kvGet('vapid'); if (!v) { v = webpush.generateVAPIDKeys(); await kvSet('vapid', v); }
+  webpush.setVapidDetails('mailto:inboxsole@gmail.com', v.publicKey, v.privateKey); VAPID_PUB = v.publicKey;
   if (!(await kvGet('epoch'))) await kvSet('epoch', String(Date.now()));
   const [{ n }] = await q('select count(*)::int as n from users');
   if (n > 0) return;
@@ -112,6 +116,32 @@ async function savePdfVia(r, root) {
 const lastAt = d => { const h = (d.history || []).filter(x => x.action === 'approved'); return h.length ? h[h.length - 1].at : (d.updatedAt || d.createdAt || new Date().toISOString()); };
 async function fxList() { return (await q('select data from fx order by sort')).map(r => r.data); }
 
+// ---------- Web Push ----------
+let VAPID_PUB = '';
+async function pushTo(ids, msg) {
+  ids = [...new Set(ids.filter(Boolean).map(String))]; if (!ids.length || !VAPID_PUB) return;
+  const subs = await q('select endpoint, sub from push_subs where user_id = any($1)', [ids]);
+  await Promise.all(subs.map(x => webpush.sendNotification(x.sub, JSON.stringify(msg), { TTL: 86400 }).catch(async e => {
+    if (e.statusCode === 404 || e.statusCode === 410) await q('delete from push_subs where endpoint=$1', [x.endpoint]); else console.warn('push', e.statusCode || e.message); })));
+}
+const TYPE_NAME = { quote: 'ໃບສະເໜີລາຄາ', expense: 'ໃບສະເໜີລາຍຈ່າຍ', income: 'ໃບລາຍຮັບ', payment: 'ໃບລາຍຈ່າຍ' };
+const STAGE_NAME = { 0: 'ເລືອກບິນ', 1: 'ບັນຊີ', 2: 'ກວດສອບ', 3: 'ປະທານ' };
+function docMsg(d, title) {
+  const t = (d.type === 'quote' ? (d.fields || {}).customer : (d.fields || {}).purpose) || '';
+  return { title, body: `${TYPE_NAME[d.type] || 'ເອກະສານ'} ${d.no || ''}${t ? ' · ' + t : ''}`, url: './?doc=' + encodeURIComponent(d.id), doc: String(d.id), tag: 'doc-' + d.id };
+}
+function notifyDoc(old, d, me) { later('push', async () => {
+  const us = await users(), ids = f => us.filter(u => u.id !== me.id && f(u)).map(u => u.id);
+  if (d.status === 'pending' && (!old || old.status !== 'pending' || sg(d) !== sg(old)))
+    await pushTo(ids(u => canApprove(u, d)), docMsg(d, MULTI(d.type) ? 'ມີເອກະສານລໍຖ້າ' + STAGE_NAME[sg(d)] : 'ມີເອກະສານລໍຖ້າອະນຸມັດ'));
+  if (old && old.status !== d.status && d.createdBy !== me.id) {
+    const t = { returned: 'ເອກະສານຖືກສົ່ງກັບແກ້ໄຂ', rejected: 'ເອກະສານບໍ່ອະນຸມັດ', approved: 'ເອກະສານອະນຸມັດແລ້ວ' }[d.status];
+    if (t) await pushTo([d.createdBy], docMsg(d, t));
+  }
+  if (d.status === 'approved' && (!old || old.status !== 'approved') && (d.type === 'expense' || d.type === 'payment'))
+    await pushTo(ids(u => u.pos === 'ບັນຊີ' || (u.perms || {}).tfCreate), docMsg(d, 'ລໍຖ້າສ້າງໃບໂອນ'));
+}); }
+
 // ---------- API ----------
 const API = {
   async login(r) {
@@ -122,7 +152,23 @@ const API = {
     await q('insert into sessions values ($1,$2,$3)', [token, u.id, expires]);
     return { token, expires, user: pub(toUser(u)) };
   },
+  // Change password from the login page: old password required; signs out every device of that user.
+  async changePassword(r) {
+    const u = (await q('select * from users where id=$1', [String(r.id || '').trim()]))[0];
+    if (!u || hash(r.oldPw || '', u.salt) !== u.pw_hash) throw new Error('ໄອດີ ຫຼື ລະຫັດຜ່ານເກົ່າບໍ່ຖືກຕ້ອງ');
+    if (String(r.newPw || '').length < 4) throw new Error('ລະຫັດໃໝ່ຕ້ອງມີຢ່າງໜ້ອຍ 4 ຕົວ');
+    const salt = crypto.randomUUID();
+    await q('update users set pw_hash=$2, salt=$3 where id=$1', [u.id, hash(r.newPw, salt), salt]);
+    await q('delete from sessions where user_id=$1', [u.id]);
+    return true;
+  },
   async logout(r) { await q('delete from sessions where token=$1', [String(r.token || '')]); return true; },
+  async pushKey(r) { await auth(r); return { key: VAPID_PUB }; },
+  async pushSubscribe(r) {
+    const me = await auth(r), x = r.sub || {}; if (!x.endpoint) throw new Error('bad subscription');
+    await q('insert into push_subs (endpoint,user_id,sub) values ($1,$2,$3) on conflict (endpoint) do update set user_id=excluded.user_id, sub=excluded.sub', [x.endpoint, me.id, JSON.stringify(x)]); return true;
+  },
+  async pushUnsubscribe(r) { await q('delete from push_subs where endpoint=$1', [String(r.endpoint || '')]); return true; },
   async me(r) { return pub(await auth(r)); },
   async load(r) {
     const me = await auth(r);
@@ -175,7 +221,8 @@ const API = {
   async saveDoc(r) {
     const me = await auth(r), d = r.doc, old = await getDoc(d.id);
     if (!old && !(d.type === 'quote' ? me.perms.createQuote : me.perms.createExpense)) throw new Error('ບໍ່ມີສິດສ້າງເອກະສານ');
-    if (old && old.status !== d.status && ['approved', 'rejected', 'returned'].includes(d.status) && !canApprove(me, old)) throw new Error('ບໍ່ມີສິດອະນຸມັດ');
+    const recall = old && old.status === 'pending' && d.status === 'returned' && old.createdBy === me.id;
+    if (old && old.status !== d.status && ['approved', 'rejected', 'returned'].includes(d.status) && !canApprove(me, old) && !recall) throw new Error('ບໍ່ມີສິດອະນຸມັດ');
     if (old && old.status === 'approved' && !canApprove(me, old)) throw new Error('ເອກະສານອະນຸມັດແລ້ວ ແກ້ໄຂບໍ່ໄດ້');
     if (old && MULTI(old.type) && old.status === 'pending' && d.status === 'pending' && sg(d) > sg(old) && !canApprove(me, old)) throw new Error('ບໍ່ມີສິດຜ່ານຂັ້ນຕອນນີ້');
     if (!old) { d.createdBy = me.id; d.no = await tmpNo(); }
@@ -184,6 +231,7 @@ const API = {
     if (fresh) d.no = await nextNo(d.type);
     if (old && old.tf && !d.tf) d.tf = old.tf;
     await putDoc(d);
+    notifyDoc(old, d, me);
     if (old && old.status === 'approved' && d.status !== 'approved') dropPdf(String(d.id));
     if (fresh) serverPdf(d);
     return d;
@@ -208,7 +256,13 @@ const API = {
     if (st === 'created' && tf0.status !== 'created' && !img) throw new Error('ກະລຸນາແນບຮູບໃບໂອນກ່ອນ');
     if (!st || st === 'new' || tf0.status === st) d.tf = { ...tf0, img };
     else d.tf = st === 'created' ? { ...tf0, img, status: 'created', by: me.id, at: new Date().toISOString() } : { ...tf0, img, status: 'done', doneBy: me.id, doneAt: new Date().toISOString() };
-    await putDoc(d); return d.tf;
+    await putDoc(d);
+    if (st && st !== 'new' && st !== tf0.status) later('push', async () => {
+      const us = await users(), ids = f => us.filter(u => u.id !== me.id && f(u)).map(u => u.id);
+      if (st === 'created') await pushTo(ids(u => u.pos === 'ຜູ້ຈັດການ' || (u.perms || {}).tfDone), docMsg(d, 'ລໍຖ້າໂອນເງິນ'));
+      if (st === 'done') await pushTo(ids(u => u.pos === 'ບັນຊີ' || (u.perms || {}).tfCreate), docMsg(d, 'ໂອນເງິນສຳເລັດແລ້ວ'));
+    });
+    return d.tf;
   },
   async markDownloaded(r) {
     const me = await auth(r), d = await getDoc(r.id);
@@ -258,7 +312,7 @@ const API = {
 };
 
 // Writes run one at a time (like the old script lock) so numbers never collide.
-const READS = new Set(['me', 'load', 'listDocs', 'listUsers', 'getFile', 'listNoPdf', 'loadFx', 'listFx', 'login', 'logout', 'upload']);
+const READS = new Set(['pushKey', 'pushUnsubscribe', 'me', 'load', 'listDocs', 'listUsers', 'getFile', 'listNoPdf', 'loadFx', 'listFx', 'login', 'logout', 'upload']);
 let chain = Promise.resolve();
 const serial = fn => { const p = chain.then(fn, fn); chain = p.catch(() => {}); return p; };
 
