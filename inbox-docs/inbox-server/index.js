@@ -120,9 +120,23 @@ async function fxList() { return (await q('select data from fx order by sort')).
 let VAPID_PUB = '';
 async function pushTo(ids, msg) {
   ids = [...new Set(ids.filter(Boolean).map(String))]; if (!ids.length || !VAPID_PUB) return;
-  const subs = await q('select endpoint, sub from push_subs where user_id = any($1)', [ids]);
-  await Promise.all(subs.map(x => webpush.sendNotification(x.sub, JSON.stringify(msg), { TTL: 86400 }).catch(async e => {
+  const subs = await q('select endpoint, user_id, sub from push_subs where user_id = any($1)', [ids]), badge = await badgeMap(ids);
+  await Promise.all(subs.map(x => webpush.sendNotification(x.sub, JSON.stringify({ ...msg, badge: badge[x.user_id] || 0 }), { TTL: 86400 }).catch(async e => {
     if (e.statusCode === 404 || e.statusCode === 410) await q('delete from push_subs where endpoint=$1', [x.endpoint]); else console.warn('push', e.statusCode || e.message); })));
+}
+// Work waiting for each user — shown as the number on the app icon.
+async function badgeMap(ids) {
+  const us = (await users()).filter(u => ids.includes(u.id));
+  const rows = (await q(`select data from docs where status in ('pending','returned') or (status='approved' and type in ('expense','payment') and coalesce(data->'tf'->>'status','new') <> 'done')`)).map(r => r.data);
+  const m = {};
+  for (const u of us) { let n = 0;
+    for (const d of rows) {
+      if (d.status === 'pending') { if (canApprove(u, d)) n++; }
+      else if (d.status === 'returned') { if (d.createdBy === u.id) n++; }
+      else { const st = (d.tf || {}).status; if ((!st || st === 'new') && u.pos === 'ບັນຊີ') n++; else if (st === 'created' && u.pos === 'ຜູ້ຈັດການ') n++; }
+    }
+    m[u.id] = n; }
+  return m;
 }
 const TYPE_NAME = { quote: 'ໃບສະເໜີລາຄາ', expense: 'ໃບສະເໜີລາຍຈ່າຍ', income: 'ໃບລາຍຮັບ', payment: 'ໃບລາຍຈ່າຍ' };
 const STAGE_NAME = { 0: 'ເລືອກບິນ', 1: 'ບັນຊີ', 2: 'ກວດສອບ', 3: 'ປະທານ' };
@@ -167,6 +181,10 @@ const API = {
   async pushSubscribe(r) {
     const me = await auth(r), x = r.sub || {}; if (!x.endpoint) throw new Error('bad subscription');
     await q('insert into push_subs (endpoint,user_id,sub) values ($1,$2,$3) on conflict (endpoint) do update set user_id=excluded.user_id, sub=excluded.sub', [x.endpoint, me.id, JSON.stringify(x)]); return true;
+  },
+  async pushTest(r) {
+    const me = await auth(r), n = (await q('select count(*)::int as n from push_subs where user_id=$1', [me.id]))[0].n;
+    await pushTo([me.id], { title: 'ທົດສອບແຈ້ງເຕືອນ', body: 'ແຈ້ງເຕືອນຂອງ ' + me.name + ' ໃຊ້ໄດ້ແລ້ວ (' + n + ' ເຄື່ອງ)', url: './', tag: 'push-test' }); return n;
   },
   async pushUnsubscribe(r) { await q('delete from push_subs where endpoint=$1', [String(r.endpoint || '')]); return true; },
   async me(r) { return pub(await auth(r)); },
