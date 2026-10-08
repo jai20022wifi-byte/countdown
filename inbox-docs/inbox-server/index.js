@@ -78,7 +78,8 @@ async function auth(r) {
 const parts = d => Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d).map(p => [p.type, p.value]));
 const day = iso => { try { const p = parts(new Date(iso)); return `${p.year}-${p.month}-${p.day}`; } catch (e) { return ''; } };
 const MULTI = t => t === 'income' || t === 'payment' || t === 'expense';
-const sg = d => d.stage ?? (d.type === 'expense' ? 0 : 1);
+// ໃບລາຍຮັບ skips ບັນຊີ: starts at ກວດສອບ (2).
+const sg = d => { const x = d.stage ?? (d.type === 'expense' ? 0 : d.type === 'income' ? 2 : 1); return d.type === 'income' && x < 2 ? 2 : x; };
 function canApprove(u, d) { const p = u.perms || {};
   if (d.status === 'approved') return !!p.manageApproved;
   if (MULTI(d.type)) return !!p[d.status === 'pending' ? ({ 0: 'approveExpense', 1: 'rpAccount', 2: 'rpCheck', 3: 'rpPresident' }[sg(d)]) : 'rpPresident'];
