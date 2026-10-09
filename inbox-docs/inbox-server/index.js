@@ -10,7 +10,7 @@ const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/clien
 
 const ENV = process.env;
 const SESSION_DAYS = 7;
-const PERMS = ['createQuote','createExpense','viewAll','approveQuote','approveExpense','rpCheck','rpAccount','rpPresident','manageApproved','edit','print','manageUsers','projCreate','projEdit','projDelete','tfCreate','tfDone'];
+const PERMS = ['createQuote','createExpense','viewAll','approveQuote','approveExpense','rpCheck','rpAccount','rpPresident','rpAccountIn','rpCheckIn','rpPresidentIn','manageApproved','edit','print','manageUsers','projCreate','projEdit','projDelete','tfCreate','tfDone','tfDownload','presidentOnly'];
 const TZ = 'Asia/Vientiane';
 
 // ---------- database ----------
@@ -78,10 +78,12 @@ async function auth(r) {
 const parts = d => Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d).map(p => [p.type, p.value]));
 const day = iso => { try { const p = parts(new Date(iso)); return `${p.year}-${p.month}-${p.day}`; } catch (e) { return ''; } };
 const MULTI = t => t === 'income' || t === 'payment' || t === 'expense';
-// ໃບລາຍຮັບ skips ບັນຊີ: starts at ກວດສອບ (2).
-const sg = d => { const x = d.stage ?? (d.type === 'expense' ? 0 : d.type === 'income' ? 2 : 1); return d.type === 'income' && x < 2 ? 2 : x; };
+const sg = d => d.stage ?? (d.type === 'expense' ? 0 : 1);
+// ໃບລາຍຮັບ has its own rights; unset ones fall back to the old shared ones.
+const pv = (p, k) => p[k] ?? (k === 'rpAccountIn' ? p.rpAccount : k === 'rpCheckIn' ? p.rpCheck : k === 'rpPresidentIn' ? p.rpPresident : undefined);
 function canApprove(u, d) { const p = u.perms || {};
   if (d.status === 'approved') return !!p.manageApproved;
+  if (d.type === 'income') return !!pv(p, d.status === 'pending' ? ({ 1: 'rpAccountIn', 2: 'rpCheckIn', 3: 'rpPresidentIn' }[sg(d)] || 'rpAccountIn') : 'rpPresidentIn');
   if (MULTI(d.type)) return !!p[d.status === 'pending' ? ({ 0: 'approveExpense', 1: 'rpAccount', 2: 'rpCheck', 3: 'rpPresident' }[sg(d)]) : 'rpPresident'];
   return d.type === 'quote' ? !!p.approveQuote : !!p.approveExpense; }
 async function getDoc(id) { const r = await q('select data from docs where id=$1', [String(id)]); return r[0] ? r[0].data : null; }
@@ -94,7 +96,7 @@ async function visibleDocs(me, from) {
   const p = me.perms || {}, out = [];
   for (const r of await q('select type,status,created_by,data from docs')) {
     const own = r.created_by === me.id, st = r.status;
-    if (!own && (st === 'draft' || !(p.viewAll || (r.type === 'quote' ? p.approveQuote : r.type === 'expense' ? (p.approveExpense || p.rpCheck || p.rpAccount || p.rpPresident) : (p.rpCheck || p.rpAccount || p.rpPresident))))) continue;
+    if (!own && (st === 'draft' || !(p.viewAll || (r.type === 'quote' ? p.approveQuote : r.type === 'income' ? (pv(p, 'rpAccountIn') || pv(p, 'rpCheckIn') || pv(p, 'rpPresidentIn')) : r.type === 'expense' ? (p.approveExpense || p.rpCheck || p.rpAccount || p.rpPresident) : (p.rpCheck || p.rpAccount || p.rpPresident))))) continue;
     if (!from || st === 'pending' || day(r.data.createdAt) >= from) out.push(r.data);
   }
   return out;
@@ -125,16 +127,35 @@ async function pushTo(ids, msg) {
   await Promise.all(subs.map(x => webpush.sendNotification(x.sub, JSON.stringify({ ...msg, badge: badge[x.user_id] || 0 }), { TTL: 86400 }).catch(async e => {
     if (e.statusCode === 404 || e.statusCode === 410) await q('delete from push_subs where endpoint=$1', [x.endpoint]); else console.warn('push', e.statusCode || e.message); })));
 }
+// ໃບແລກປ່ຽນເງິນ: stage 1 ກວດສອບ (fxAccount), stage 2 ປະທານ (fxDirector); old slips without status count as approved.
+const fxSt = x => x.status || 'approved', fxSg = x => x.stage || 1;
+const FX_STAGE = { 1: ['ກວດສອບ', 'fxAccount'], 2: ['ປະທານ', 'fxDirector'] };
+function fxMine(u, x) { const p = u.perms || {};
+  if (fxSt(x) === 'returned') return x.byId === u.id;
+  if (fxSt(x) !== 'pending') return false;
+  if (presOnly(u) && fxSg(x) !== 2) return false;
+  return !!p[(FX_STAGE[fxSg(x)] || FX_STAGE[1])[1]]; }
+function fxMsg(x, title) { return { title, body: 'ໃບແລກປ່ຽນເງິນ ' + (x.no || '') + (x.subject ? ' · ' + x.subject : ''), url: './', tag: 'fx-' + x.id }; }
+function notifyFx(old, x, me) { later('push', async () => {
+  const us = await users(), ids = f => us.filter(u => u.id !== me.id && f(u)).map(u => u.id);
+  if (fxSt(x) === 'pending' && (!old || fxSt(old) !== 'pending' || fxSg(old) !== fxSg(x)))
+    await pushTo(ids(u => fxMine(u, x)), fxMsg(x, 'ມີໃບແລກປ່ຽນເງິນລໍຖ້າ' + (FX_STAGE[fxSg(x)] || FX_STAGE[1])[0]));
+  if (old && fxSt(old) !== fxSt(x) && x.byId && x.byId !== me.id) {
+    const t = { returned: 'ໃບແລກປ່ຽນເງິນຖືກສົ່ງກັບແກ້ໄຂ', rejected: 'ໃບແລກປ່ຽນເງິນບໍ່ອະນຸມັດ', approved: 'ໃບແລກປ່ຽນເງິນອະນຸມັດແລ້ວ' }[fxSt(x)];
+    if (t) await pushTo([x.byId], fxMsg(x, t)); }
+}); }
 // Work waiting for each user — shown as the number on the app icon.
 async function badgeMap(ids) {
   const us = (await users()).filter(u => ids.includes(u.id));
-  const rows = (await q(`select data from docs where status in ('pending','returned') or (status='approved' and type in ('expense','payment') and coalesce(data->'tf'->>'status','new') <> 'done')`)).map(r => r.data);
+  const rows = (await q(`select data from docs where status in ('pending','returned') or (status='approved' and type in ('expense','payment') and (coalesce(data->'tf'->>'status','new') <> 'done' or data->'tf'->'dl' is null))`)).map(r => r.data);
+  const fxRows = (await q(`select data from fx where data->>'status' in ('pending','returned')`)).map(r => r.data);
   const m = {};
-  for (const u of us) { let n = 0;
+  for (const u of us) { let n = fxRows.filter(x => fxMine(u, x)).length;
     for (const d of rows) {
+      if (presOnly(u)) { if ((d.status === 'pending' && MULTI(d.type) && sg(d) === 3 && canApprove(u, d)) || (d.status === 'returned' && d.createdBy === u.id)) n++; continue; }
       if (d.status === 'pending') { if (canApprove(u, d)) n++; }
       else if (d.status === 'returned') { if (d.createdBy === u.id) n++; }
-      else { const st = (d.tf || {}).status; if ((!st || st === 'new') && u.pos === 'ບັນຊີ') n++; else if (st === 'created' && u.pos === 'ຜູ້ຈັດການ') n++; }
+      else { const st = (d.tf || {}).status, p = u.perms || {}; if ((!st || st === 'new') && p.tfCreate) n++; else if (st === 'created' && p.tfDone) n++; else if (st === 'done' && !(d.tf || {}).dl && p.tfDownload) n++; }
     }
     m[u.id] = n; }
   return m;
@@ -145,16 +166,19 @@ function docMsg(d, title) {
   const t = (d.type === 'quote' ? (d.fields || {}).customer : (d.fields || {}).purpose) || '';
   return { title, body: `${TYPE_NAME[d.type] || 'ເອກະສານ'} ${d.no || ''}${t ? ' · ' + t : ''}`, url: './?doc=' + encodeURIComponent(d.id), doc: String(d.id), tag: 'doc-' + d.id };
 }
+// ໄອດີປະທານ: every right, but pushed only for the ປະທານ step.
+function presOnly(u) { return !!(u.perms || {}).presidentOnly; }
 function notifyDoc(old, d, me) { later('push', async () => {
   const us = await users(), ids = f => us.filter(u => u.id !== me.id && f(u)).map(u => u.id);
+  const pres = presOnly, okStage = u => !pres(u) || (MULTI(d.type) && sg(d) === 3);
   if (d.status === 'pending' && (!old || old.status !== 'pending' || sg(d) !== sg(old)))
-    await pushTo(ids(u => canApprove(u, d)), docMsg(d, MULTI(d.type) ? 'ມີເອກະສານລໍຖ້າ' + STAGE_NAME[sg(d)] : 'ມີເອກະສານລໍຖ້າອະນຸມັດ'));
+    await pushTo(ids(u => canApprove(u, d) && okStage(u)), docMsg(d, MULTI(d.type) ? 'ມີເອກະສານລໍຖ້າ' + STAGE_NAME[sg(d)] : 'ມີເອກະສານລໍຖ້າອະນຸມັດ'));
   if (old && old.status !== d.status && d.createdBy !== me.id) {
     const t = { returned: 'ເອກະສານຖືກສົ່ງກັບແກ້ໄຂ', rejected: 'ເອກະສານບໍ່ອະນຸມັດ', approved: 'ເອກະສານອະນຸມັດແລ້ວ' }[d.status];
     if (t) await pushTo([d.createdBy], docMsg(d, t));
   }
   if (d.status === 'approved' && (!old || old.status !== 'approved') && (d.type === 'expense' || d.type === 'payment'))
-    await pushTo(ids(u => u.pos === 'ບັນຊີ' || (u.perms || {}).tfCreate), docMsg(d, 'ລໍຖ້າສ້າງໃບໂອນ'));
+    await pushTo(ids(u => !pres(u) && (u.perms || {}).tfCreate), docMsg(d, 'ລໍຖ້າສ້າງໃບໂອນ'));
 }); }
 
 // ---------- API ----------
@@ -278,14 +302,14 @@ const API = {
     await putDoc(d);
     if (st && st !== 'new' && st !== tf0.status) later('push', async () => {
       const us = await users(), ids = f => us.filter(u => u.id !== me.id && f(u)).map(u => u.id);
-      if (st === 'created') await pushTo(ids(u => u.pos === 'ຜູ້ຈັດການ' || (u.perms || {}).tfDone), docMsg(d, 'ລໍຖ້າໂອນເງິນ'));
-      if (st === 'done') await pushTo(ids(u => u.pos === 'ບັນຊີ' || (u.perms || {}).tfCreate), docMsg(d, 'ໂອນເງິນສຳເລັດແລ້ວ'));
+      if (st === 'created') await pushTo(ids(u => !presOnly(u) && (u.perms || {}).tfDone), docMsg(d, 'ລໍຖ້າໂອນເງິນ'));
+      if (st === 'done') await pushTo(ids(u => !presOnly(u) && ((u.perms || {}).tfDownload || u.id === d.createdBy)), docMsg(d, 'ໂອນເງິນສຳເລັດແລ້ວ'));
     });
     return d.tf;
   },
   async markDownloaded(r) {
     const me = await auth(r), d = await getDoc(r.id);
-    if (me.pos !== 'ບັນຊີ') throw new Error('ບໍ່ມີສິດ: ສະເພາະຕຳແໜ່ງ ບັນຊີ');
+    if (me.pos !== 'ບັນຊີ' && !me.perms.tfDownload && !me.perms.manageUsers) throw new Error('ບໍ່ມີສິດດາວໂຫຼດ PDF');
     if (!d) throw new Error('ບໍ່ພົບເອກະສານ');
     if (!d.tf || d.tf.status !== 'done') throw new Error('ຍັງໂອນບໍ່ສຳເລັດ');
     d.tf = { ...d.tf, dl: { by: me.id, at: new Date().toISOString() } }; await putDoc(d); return d.tf;
@@ -320,6 +344,7 @@ const API = {
     }
     await q(`insert into fx (id,no,date,by_id,data) values ($1,$2,$3,$4,$5) on conflict (id) do update set no=excluded.no, date=excluded.date, by_id=excluded.by_id, data=excluded.data`,
       [String(x.id), x.no, x.date || '', x.byId || me.id, JSON.stringify(x)]);
+    notifyFx(old ? old.data : null, x, me);
     return x;
   },
   async deleteFx(r) { await auth(r); await q('delete from fx where id=$1', [String(r.id)]); dropPdf('fx-' + r.id); return true; },
