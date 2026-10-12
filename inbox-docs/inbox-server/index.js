@@ -276,7 +276,10 @@ const API = {
     await putDoc(d);
     notifyDoc(old, d, me);
     if (old && old.status === 'approved' && d.status !== 'approved') dropPdf(String(d.id));
-    if (fresh) serverPdf(d);
+    if (fresh) { const id = String(d.id); setTimeout(() => later('pdfFallback', async () => {
+      if ((await q('select 1 from pdfs where doc_id=$1', [id])).length) return;
+      const cur = await getDoc(id); if (cur && cur.status === 'approved') serverPdf(cur);
+    }), 5 * 60 * 1000); }
     return d;
   },
   async deleteDoc(r) {
