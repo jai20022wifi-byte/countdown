@@ -286,7 +286,9 @@ const API = {
     const me = await auth(r), d = r.doc, old = await getDoc(d.id);
     if (!old && !(d.type === 'quote' ? me.perms.createQuote : me.perms.createExpense)) throw new Error('ບໍ່ມີສິດສ້າງເອກະສານ');
     const recall = old && old.status === 'pending' && d.status === 'returned' && old.createdBy === me.id;
-    if (old && old.status !== d.status && ['approved', 'rejected', 'returned'].includes(d.status) && !canApprove(me, old) && !recall) throw new Error('ບໍ່ມີສິດອະນຸມັດ');
+    // ໃບລາຍຈ່າຍ: the creator sends it straight to the manager for an urgent transfer (no approval steps).
+    const fast = d.type === 'payment' && (d.fields || {}).kind === 'fast' && d.status === 'approved' && (!old ? true : old.createdBy === me.id && old.status !== 'approved');
+    if (old && old.status !== d.status && ['approved', 'rejected', 'returned'].includes(d.status) && !canApprove(me, old) && !recall && !fast) throw new Error('ບໍ່ມີສິດອະນຸມັດ');
     if (old && old.status === 'approved' && !canApprove(me, old)) throw new Error('ເອກະສານອະນຸມັດແລ້ວ ແກ້ໄຂບໍ່ໄດ້');
     if (old && MULTI(old.type) && old.status === 'pending' && d.status === 'pending' && sg(d) > sg(old) && !canApprove(me, old)) throw new Error('ບໍ່ມີສິດຜ່ານຂັ້ນຕອນນີ້');
     if (!old) { d.createdBy = me.id; d.no = await tmpNo(); }
@@ -297,6 +299,8 @@ const API = {
     await putDoc(d);
     notifyDoc(old, d, me);
     if (old && old.status === 'approved' && d.status !== 'approved') dropPdf(String(d.id));
+    if (fresh && fast) later('push', async () => { const us = await users();
+      await pushTo(us.filter(u => u.id !== me.id && !presOnly(u) && (u.perms || {}).tfDone).map(u => u.id), docMsg(d, 'ລາຍຈ່າຍດ່ວນ · ລໍຖ້າໂອນເງິນ')); });
     if (fresh && d.type === 'income') later('push', async () => { const us = await users();
       await pushTo(us.filter(u => u.id !== me.id && !presOnly(u) && (u.perms || {}).rcvBill).map(u => u.id), docMsg(d, 'ໃບເກັບເງິນອະນຸມັດແລ້ວ · ລໍຖ້າວາງບິນ')); });
     if (fresh && !['income','payment','expense'].includes(d.type)) { const id = String(d.id); setTimeout(() => later('pdfFallback', async () => {
