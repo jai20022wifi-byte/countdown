@@ -10,7 +10,7 @@ const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/clien
 
 const ENV = process.env;
 const SESSION_DAYS = 7;
-const PERMS = ['createQuote','createExpense','viewAll','approveQuote','approveExpense','rpCheck','rpAccount','rpPresident','rpAccountIn','rpCheckIn','rpPresidentIn','manageApproved','edit','print','manageUsers','projCreate','projEdit','projDelete','tfCreate','tfDone','tfDownload','presidentOnly'];
+const PERMS = ['createQuote','createExpense','viewAll','approveQuote','approveExpense','rpCheck','rpAccount','rpPresident','rpAccountIn','rpCheckIn','rpPresidentIn','manageApproved','edit','print','manageUsers','projCreate','projEdit','projDelete','tfCreate','tfDone','tfDownload','rcvBill','rcvPaid','rcvDownload','presidentOnly'];
 const TZ = 'Asia/Vientiane';
 
 // ---------- database ----------
@@ -144,10 +144,28 @@ function notifyFx(old, x, me) { later('push', async () => {
     const t = { returned: 'ໃບແລກປ່ຽນເງິນຖືກສົ່ງກັບແກ້ໄຂ', rejected: 'ໃບແລກປ່ຽນເງິນບໍ່ອະນຸມັດ', approved: 'ໃບແລກປ່ຽນເງິນອະນຸມັດແລ້ວ' }[fxSt(x)];
     if (t) await pushTo([x.byId], fxMsg(x, t)); }
 }); }
+// Transfers can be paid in several installments (tf.parts). Old single transfers become one part for the full amount.
+const EPS = 0.005;
+function tfParts(tf, T) { tf = tf || {}; if (Array.isArray(tf.parts)) return tf.parts;
+  if (tf.status === 'created' || tf.status === 'done') return [{ id:'p1', amt: +T || 0, img: tf.img || null, status: tf.status, by: tf.by, at: tf.at, doneBy: tf.doneBy, doneAt: tf.doneAt }];
+  return []; }
+function applyTf(tf0, T, op, me, now) {
+  const tf = { ...(tf0 || {}) }; let parts = tfParts(tf0, T).map(p => ({ ...p }));
+  if (!Array.isArray((tf0 || {}).parts) && (tf0 || {}).status && (tf0 || {}).status !== 'new') tf.img = null;
+  if (op.status === 'created') { parts.push({ id: op.pid || ('p' + Date.now()), amt: +op.amt, img: op.img || null, status: 'created', by: me, at: now }); tf.img = null; }
+  if (op.status === 'paid') { parts.push({ id: op.pid || ('p' + Date.now()), amt: +op.amt, img: op.img || null, status: 'done', by: me, at: now, doneBy: me, doneAt: now }); tf.img = null; }
+  if (op.status === 'done') { let hit = false; parts = parts.map(p => !hit && p.status === 'created' && (!op.partId || p.id === op.partId) ? (hit = true, { ...p, status: 'done', doneBy: me, doneAt: now }) : p); }
+  tf.parts = parts; tf.total = +T || 0;
+  const alloc = parts.reduce((a, p) => a + (+p.amt || 0), 0), paid = parts.filter(p => p.status === 'done').reduce((a, p) => a + (+p.amt || 0), 0);
+  if (tf.total > 0 && paid >= tf.total - EPS) { tf.status = 'done'; tf.doneBy = me; tf.doneAt = now; }
+  else if (tf.total > 0 && alloc >= tf.total - EPS) { tf.status = 'created'; if (!tf.by) { tf.by = me; tf.at = now; } }
+  else tf.status = 'new';
+  return tf;
+}
 // Work waiting for each user — shown as the number on the app icon.
 async function badgeMap(ids) {
   const us = (await users()).filter(u => ids.includes(u.id));
-  const rows = (await q(`select data from docs where status in ('pending','returned') or (status='approved' and type in ('expense','payment') and (coalesce(data->'tf'->>'status','new') <> 'done' or data->'tf'->'dl' is null))`)).map(r => r.data);
+  const rows = (await q(`select data from docs where status in ('pending','returned') or (status='approved' and type in ('expense','payment','income') and (coalesce(data->'tf'->>'status','new') <> 'done' or data->'tf'->'dl' is null))`)).map(r => r.data);
   const fxRows = (await q(`select data from fx where data->>'status' in ('pending','returned')`)).map(r => r.data);
   const m = {};
   for (const u of us) { let n = fxRows.filter(x => fxMine(u, x)).length;
@@ -155,7 +173,10 @@ async function badgeMap(ids) {
       if (presOnly(u)) { if ((d.status === 'pending' && MULTI(d.type) && sg(d) === 3 && canApprove(u, d)) || (d.status === 'returned' && d.createdBy === u.id)) n++; continue; }
       if (d.status === 'pending') { if (canApprove(u, d)) n++; }
       else if (d.status === 'returned') { if (d.createdBy === u.id) n++; }
-      else { const st = (d.tf || {}).status, p = u.perms || {}; if ((!st || st === 'new') && p.tfCreate) n++; else if (st === 'created' && p.tfDone) n++; else if (st === 'done' && !(d.tf || {}).dl && p.tfDownload) n++; }
+      else if (d.type === 'income') { const tf = d.tf || {}, p = u.perms || {};
+        if (tf.status === 'done') { if (!tf.dl && p.rcvDownload) n++; } else if (tf.billed) { if (p.rcvPaid) n++; } else if (p.rcvBill) n++; }
+      else { const st = (d.tf || {}).status, p = u.perms || {}, pend = tfParts(d.tf, (d.tf || {}).total).filter(x => x.status === 'created').length;
+        if ((!st || st === 'new') && p.tfCreate) n++; if (p.tfDone) n += pend; if (st === 'done' && !(d.tf || {}).dl && p.tfDownload) n++; }
     }
     m[u.id] = n; }
   return m;
@@ -276,7 +297,9 @@ const API = {
     await putDoc(d);
     notifyDoc(old, d, me);
     if (old && old.status === 'approved' && d.status !== 'approved') dropPdf(String(d.id));
-    if (fresh) { const id = String(d.id); setTimeout(() => later('pdfFallback', async () => {
+    if (fresh && d.type === 'income') later('push', async () => { const us = await users();
+      await pushTo(us.filter(u => u.id !== me.id && !presOnly(u) && (u.perms || {}).rcvBill).map(u => u.id), docMsg(d, 'ໃບເກັບເງິນອະນຸມັດແລ້ວ · ລໍຖ້າວາງບິນ')); });
+    if (fresh && !['income','payment','expense'].includes(d.type)) { const id = String(d.id); setTimeout(() => later('pdfFallback', async () => {
       if ((await q('select 1 from pdfs where doc_id=$1', [id])).length) return;
       const cur = await getDoc(id); if (cur && cur.status === 'approved') serverPdf(cur);
     }), 5 * 60 * 1000); }
@@ -293,27 +316,63 @@ const API = {
     const me = await auth(r), p = me.perms || {}, d = await getDoc(r.id);
     if (!d) throw new Error('ບໍ່ພົບເອກະສານ');
     if (d.status !== 'approved') throw new Error('ເອກະສານຍັງບໍ່ອະນຸມັດ');
-    const tf0 = d.tf || {}, st = r.tf && r.tf.status;
+    const tf0 = d.tf || {}, st = r.tf && r.tf.status, now = new Date().toISOString();
     if (st === 'created' && me.pos !== 'ບັນຊີ' && !p.tfCreate && !p.manageUsers) throw new Error('ບໍ່ມີສິດສ້າງໃບໂອນ');
-    if (st === 'done' && me.pos !== 'ຜູ້ຈັດການ' && !p.tfDone && !p.manageUsers) throw new Error('ບໍ່ມີສິດໂອນເງິນ');
-    if (st && st !== 'created' && st !== 'done' && st !== 'new') throw new Error('ສະຖານະບໍ່ຖືກ');
+    // ວາງບິນ ແລະ ຮັບເງິນ (income): the accountant both bills and confirms the money arrived.
+    if (st === 'done' && !(d.type === 'income' ? (me.pos === 'ບັນຊີ' || p.tfCreate || p.tfDone || p.manageUsers) : (me.pos === 'ຜູ້ຈັດການ' || p.tfDone || p.manageUsers))) throw new Error('ບໍ່ມີສິດ');
+    if (st && !['created','done','new','billed','paid'].includes(st)) throw new Error('ສະຖານະບໍ່ຖືກ');
+    // ວາງບິນ ແລະ ຮັບເງິນ: 'billed' = bill handed to the customer; 'paid' = one receipt (slip + amount), several allowed until 100%.
+    if (st === 'billed' || st === 'paid') {
+      if (d.type !== 'income') throw new Error('ສະຖານະບໍ່ຖືກ');
+      if (!(p.manageUsers || (st === 'billed' ? p.rcvBill : p.rcvPaid))) throw new Error('ບໍ່ມີສິດ');
+      const T1 = +r.tf.total || +tf0.total || 0;
+      if (st === 'billed') { if (tf0.billed) return tf0; d.tf = { ...tf0, billed: { by: me.id, at: now }, total: T1 }; }
+      else {
+        const parts1 = tfParts(tf0, T1); if (parts1.some(x => x.id === r.tf.pid)) return tf0;
+        const img = r.tf.img === undefined ? tf0.img : r.tf.img, amt = +r.tf.amt, left = T1 - parts1.reduce((x, y) => x + (+y.amt || 0), 0);
+        if (!img) throw new Error('ກະລຸນາແນບຮູບສະລິບກ່ອນ');
+        if (!(amt > 0)) throw new Error('ກະລຸນາໃສ່ຈຳນວນເງິນ');
+        if (T1 > 0 && amt > left + EPS) throw new Error('ຈຳນວນເງິນເກີນຍອດທີ່ເຫຼືອ');
+        d.tf = applyTf({ ...tf0, billed: tf0.billed || { by: me.id, at: now } }, T1, { status: 'paid', amt, img, pid: r.tf.pid }, me.id, now);
+      }
+      await putDoc(d);
+      later('push', async () => {
+        const us = await users(), ids = f => us.filter(u => u.id !== me.id && !presOnly(u) && f(u)).map(u => u.id), cr = d.createdBy;
+        if (st === 'billed') await pushTo(ids(u => (u.perms || {}).rcvPaid), docMsg(d, 'ວາງບິນແລ້ວ · ລໍຖ້າຮັບເງິນ'));
+        else if (d.tf.status === 'done') await pushTo(ids(u => (u.perms || {}).rcvDownload || u.id === cr), docMsg(d, 'ຮັບເງິນຄົບແລ້ວ'));
+        else { const paid = tfParts(d.tf, T1).filter(x => x.status === 'done').reduce((a, x) => a + (+x.amt || 0), 0);
+          await pushTo(ids(u => u.id === cr), docMsg(d, 'ຮັບເງິນງວດນີ້ແລ້ວ · ຍັງເຫຼືອ ' + Math.round((T1 - paid) * 100) / 100 + ' ' + (d.currency || 'ກີບ'))); }
+      });
+      return d.tf;
+    }
     if (!st && me.pos !== 'ບັນຊີ' && !p.tfCreate && !p.manageUsers) throw new Error('ບໍ່ມີສິດແນບຮູບ');
-    const img = r.tf.img === undefined ? tf0.img : r.tf.img;
-    if (st === 'created' && tf0.status !== 'created' && !img) throw new Error('ກະລຸນາແນບຮູບໃບໂອນກ່ອນ');
-    if (!st || st === 'new' || tf0.status === st) d.tf = { ...tf0, img };
-    else d.tf = st === 'created' ? { ...tf0, img, status: 'created', by: me.id, at: new Date().toISOString() } : { ...tf0, img, status: 'done', doneBy: me.id, doneAt: new Date().toISOString() };
+    const T = +r.tf.total || +tf0.total || 0, parts0 = tfParts(tf0, T);
+    if (!st || st === 'new') { d.tf = { ...tf0, img: r.tf.img === undefined ? tf0.img : r.tf.img }; await putDoc(d); return d.tf; }
+    if (st === 'created') {
+      if (parts0.some(x => x.id === r.tf.pid)) return tf0;
+      const img = r.tf.img === undefined ? tf0.img : r.tf.img, amt = +r.tf.amt || T - parts0.reduce((x, y) => x + (+y.amt || 0), 0);
+      if (!img) throw new Error('ກະລຸນາແນບຮູບໃບໂອນກ່ອນ');
+      const left = T - parts0.reduce((x, y) => x + (+y.amt || 0), 0);
+      if (!(amt > 0)) throw new Error('ກະລຸນາໃສ່ຈຳນວນເງິນ');
+      if (T > 0 && amt > left + EPS) throw new Error('ຈຳນວນເງິນເກີນຍອດທີ່ເຫຼືອ');
+      d.tf = applyTf(tf0, T, { status: 'created', amt, img, pid: r.tf.pid }, me.id, now);
+    } else {
+      if (!parts0.some(x => x.status === 'created' && (!r.tf.partId || x.id === r.tf.partId))) return tf0;
+      d.tf = applyTf(tf0, T, { status: 'done', partId: r.tf.partId }, me.id, now);
+    }
     await putDoc(d);
-    if (st && st !== 'new' && st !== tf0.status) later('push', async () => {
+    if (d.type !== 'income') later('push', async () => {
       const us = await users(), ids = f => us.filter(u => u.id !== me.id && f(u)).map(u => u.id);
       if (st === 'created') await pushTo(ids(u => !presOnly(u) && (u.perms || {}).tfDone), docMsg(d, 'ລໍຖ້າໂອນເງິນ'));
-      if (st === 'done') await pushTo(ids(u => !presOnly(u) && ((u.perms || {}).tfDownload || u.id === d.createdBy)), docMsg(d, 'ໂອນເງິນສຳເລັດແລ້ວ'));
+      if (st === 'done' && d.tf.status === 'done') await pushTo(ids(u => !presOnly(u) && ((u.perms || {}).tfDownload || u.id === d.createdBy)), docMsg(d, 'ໂອນເງິນສຳເລັດແລ້ວ'));
+      if (st === 'done' && d.tf.status !== 'done') await pushTo(ids(u => !presOnly(u) && (u.perms || {}).tfCreate), docMsg(d, 'ໂອນງວດນີ້ແລ້ວ · ຍັງເຫຼືອ'));
     });
     return d.tf;
   },
   async markDownloaded(r) {
     const me = await auth(r), d = await getDoc(r.id);
-    if (me.pos !== 'ບັນຊີ' && !me.perms.tfDownload && !me.perms.manageUsers) throw new Error('ບໍ່ມີສິດດາວໂຫຼດ PDF');
     if (!d) throw new Error('ບໍ່ພົບເອກະສານ');
+    if (!(me.perms.manageUsers || (d.type === 'income' ? me.perms.rcvDownload : (me.pos === 'ບັນຊີ' || me.perms.tfDownload)))) throw new Error('ບໍ່ມີສິດດາວໂຫຼດ PDF');
     if (!d.tf || d.tf.status !== 'done') throw new Error('ຍັງໂອນບໍ່ສຳເລັດ');
     d.tf = { ...d.tf, dl: { by: me.id, at: new Date().toISOString() } }; await putDoc(d); return d.tf;
   },
