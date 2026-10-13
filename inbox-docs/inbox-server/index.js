@@ -170,7 +170,9 @@ async function badgeMap(ids) {
   const m = {};
   for (const u of us) { let n = fxRows.filter(x => fxMine(u, x)).length;
     for (const d of rows) {
-      if (presOnly(u)) { if ((d.status === 'pending' && MULTI(d.type) && sg(d) === 3 && canApprove(u, d)) || (d.status === 'returned' && d.createdBy === u.id)) n++; continue; }
+      if (presOnly(u)) { const td = (o => `${o.year}-${o.month}-${o.day}`)(parts(new Date()));
+        if ((d.status === 'pending' && MULTI(d.type) && sg(d) === 3 && canApprove(u, d)) || (d.status === 'returned' && d.createdBy === u.id)
+          || (d.status === 'approved' && d.type === 'income' && (d.tf || {}).status !== 'done' && d.fields && d.fields.dueDate && d.fields.dueDate < td)) n++; continue; }
       if (d.status === 'pending') { if (canApprove(u, d)) n++; }
       else if (d.status === 'returned') { if (d.createdBy === u.id) n++; }
       else if (d.type === 'income') { const tf = d.tf || {}, p = u.perms || {}, td = (o => `${o.year}-${o.month}-${o.day}`)(parts(new Date()));
@@ -460,7 +462,7 @@ async function overdueCheck() {
   await kvSet('overdueDay', today);
   const rows = (await q(`select data from docs where status='approved' and type='income' and coalesce(data->'fields'->>'dueDate','') <> '' and data->'fields'->>'dueDate' < $1 and coalesce(data->'tf'->>'status','') <> 'done'`, [today])).map(r => r.data);
   if (!rows.length) return;
-  const ids = (await users()).filter(u => (u.perms || {}).rcvOverdue).map(u => u.id);
+  const ids = (await users()).filter(u => (u.perms || {}).rcvOverdue || presOnly(u)).map(u => u.id);
   for (const d of rows) await pushTo(ids, docMsg(d, 'ບິນກາຍກຳນົດ · ຄົບກຳນົດ ' + d.fields.dueDate.split('-').reverse().join('/')));
 }
 setInterval(() => overdueCheck().catch(e => console.warn('overdue', e.message)), 15 * 60 * 1000);
