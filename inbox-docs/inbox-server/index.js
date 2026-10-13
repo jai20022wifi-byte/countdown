@@ -10,7 +10,7 @@ const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/clien
 
 const ENV = process.env;
 const SESSION_DAYS = 7;
-const PERMS = ['createQuote','createExpense','viewAll','approveQuote','approveExpense','rpCheck','rpAccount','rpPresident','rpAccountIn','rpCheckIn','rpPresidentIn','manageApproved','edit','print','manageUsers','projCreate','projEdit','projDelete','tfCreate','tfDone','tfDownload','rcvBill','rcvPaid','rcvDownload','presidentOnly'];
+const PERMS = ['rcvOverdue','createQuote','createExpense','viewAll','approveQuote','approveExpense','rpCheck','rpAccount','rpPresident','rpAccountIn','rpCheckIn','rpPresidentIn','manageApproved','edit','print','manageUsers','projCreate','projEdit','projDelete','tfCreate','tfDone','tfDownload','rcvBill','rcvPaid','rcvDownload','presidentOnly'];
 const TZ = 'Asia/Vientiane';
 
 // ---------- database ----------
@@ -173,7 +173,8 @@ async function badgeMap(ids) {
       if (presOnly(u)) { if ((d.status === 'pending' && MULTI(d.type) && sg(d) === 3 && canApprove(u, d)) || (d.status === 'returned' && d.createdBy === u.id)) n++; continue; }
       if (d.status === 'pending') { if (canApprove(u, d)) n++; }
       else if (d.status === 'returned') { if (d.createdBy === u.id) n++; }
-      else if (d.type === 'income') { const tf = d.tf || {}, p = u.perms || {};
+      else if (d.type === 'income') { const tf = d.tf || {}, p = u.perms || {}, td = (o => `${o.year}-${o.month}-${o.day}`)(parts(new Date()));
+        if (tf.status !== 'done' && p.rcvOverdue && d.fields && d.fields.dueDate && d.fields.dueDate < td) n++;
         if (tf.status === 'done') { if (!tf.dl && p.rcvDownload) n++; } else if (tf.billed) { if (p.rcvPaid) n++; } else if (p.rcvBill) n++; }
       else { const st = (d.tf || {}).status, p = u.perms || {}, pend = tfParts(d.tf, (d.tf || {}).total).filter(x => x.status === 'created').length;
         if ((!st || st === 'new') && p.tfCreate) n++; if (p.tfDone) n += pend; if (st === 'done' && !(d.tf || {}).dl && p.tfDownload) n++; }
@@ -452,5 +453,16 @@ const pubDir = path.join(__dirname, 'public');
 app.use(express.static(pubDir, { setHeaders: (res, f) => { if (/\.(html|js|json)$/.test(f)) res.set('Cache-Control', 'no-cache'); } }));
 app.get('*', (req, res) => res.sendFile(path.join(pubDir, 'index.html')));
 
+// Overdue ໃບເກັບເງິນ: once a day (from 08:00 Vientiane) remind everyone with ສິດຮັບແຈ້ງເຕືອນ ບິນກາຍກຳນົດ until paid in full.
+async function overdueCheck() {
+  const p = parts(new Date()), today = `${p.year}-${p.month}-${p.day}`, hour = +new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', hour12: false }).format(new Date());
+  if (hour < 8 || (await kvGet('overdueDay')) === today) return;
+  await kvSet('overdueDay', today);
+  const rows = (await q(`select data from docs where status='approved' and type='income' and coalesce(data->'fields'->>'dueDate','') <> '' and data->'fields'->>'dueDate' < $1 and coalesce(data->'tf'->>'status','') <> 'done'`, [today])).map(r => r.data);
+  if (!rows.length) return;
+  const ids = (await users()).filter(u => (u.perms || {}).rcvOverdue).map(u => u.id);
+  for (const d of rows) await pushTo(ids, docMsg(d, 'ບິນກາຍກຳນົດ · ຄົບກຳນົດ ' + d.fields.dueDate.split('-').reverse().join('/')));
+}
+setInterval(() => overdueCheck().catch(e => console.warn('overdue', e.message)), 15 * 60 * 1000);
 migrate().then(() => app.listen(ENV.PORT || 8080, () => console.log('INBOX server on', ENV.PORT || 8080)))
   .catch(e => { console.error('startup failed:', e); process.exit(1); });
