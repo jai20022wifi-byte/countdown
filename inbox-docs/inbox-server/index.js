@@ -329,10 +329,6 @@ const API = {
       await pushTo(us.filter(u => u.id !== me.id && !presOnly(u) && (u.perms || {}).tfDone).map(u => u.id), docMsg(d, 'ລາຍຈ່າຍດ່ວນ · ລໍຖ້າໂອນເງິນ')); });
     if (fresh && d.type === 'income') later('push', async () => { const us = await users();
       await pushTo(us.filter(u => u.id !== me.id && !presOnly(u) && (u.perms || {}).rcvBill).map(u => u.id), docMsg(d, 'ໃບເກັບເງິນອະນຸມັດແລ້ວ · ລໍຖ້າວາງບິນ')); });
-    if (fresh && !['income','payment','expense'].includes(d.type)) { const id = String(d.id); setTimeout(() => later('pdfFallback', async () => {
-      if ((await q('select 1 from pdfs where doc_id=$1', [id])).length) return;
-      const cur = await getDoc(id); if (cur && cur.status === 'approved') serverPdf(cur);
-    }), 5 * 60 * 1000); }
     return d;
   },
   async deleteDoc(r) {
@@ -409,8 +405,10 @@ const API = {
   async savePdf(r) { await auth(r); return savePdfVia(r, 'docs'); },
   async listNoPdf(r) {
     await auth(r);
+    const it = (await q(`select i.data from intl i left join pdfs p on p.doc_id = 'intl-' || i.id where i.status = 'done' and p.doc_id is null`)).map(({ data: x }) => ({ id: 'intl-' + x.id, no: x.no, type: 'intl', title: [x.bank, x.acct].filter(Boolean).join(' · '), project: 'ໂອນເງິນໄປຕ່າງປະເທດ', at: x.createAt || x.doneAt || x.createdAt }));
     const rows = await q(`select d.data from docs d left join pdfs p on p.doc_id = d.id where d.status = 'approved' and p.doc_id is null`);
-    return rows.map(({ data: d }) => ({ id: d.id, no: d.no, type: d.type, title: (d.type === 'quote' ? (d.fields || {}).customer : (d.fields || {}).purpose) || '', project: (d.fields || {}).project || '', at: lastAt(d) }));
+    const fx = (await q(`select f.data from fx f left join pdfs p on p.doc_id = 'fx-' || f.id where coalesce(f.data->>'status','approved') = 'approved' and p.doc_id is null`)).map(({ data: x }) => ({ id: 'fx-' + x.id, no: x.no, type: 'fx', title: x.subject || [x.from, x.to].filter(Boolean).join(' › '), project: 'ແລກປ່ຽນເງິນ', at: x.date || x.createdAt }));
+    return [...it, ...fx, ...rows.map(({ data: d }) => ({ id: d.id, no: d.no, type: d.type, title: (d.type === 'quote' ? (d.fields || {}).customer : (d.fields || {}).purpose) || '', project: (d.fields || {}).project || '', at: lastAt(d) }))];
   },
   async makePdf(r) {
     await auth(r); const d = await getDoc(r.id);
