@@ -10,7 +10,7 @@ const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/clien
 
 const ENV = process.env;
 const SESSION_DAYS = 7;
-const PERMS = ['rcvOverdue','createQuote','createExpense','viewAll','approveQuote','approveExpense','rpCheck','rpAccount','rpPresident','rpAccountIn','rpCheckIn','rpPresidentIn','manageApproved','edit','print','manageUsers','projCreate','projEdit','projDelete','tfCreate','tfDone','tfDownload','rcvBill','rcvPaid','rcvDownload','presidentOnly'];
+const PERMS = ['intlRecv','intlSchedule','intlCreate','intlDone','intlDownload','rcvOverdue','createQuote','createExpense','viewAll','approveQuote','approveExpense','rpCheck','rpAccount','rpPresident','rpAccountIn','rpCheckIn','rpPresidentIn','manageApproved','edit','print','manageUsers','projCreate','projEdit','projDelete','tfCreate','tfDone','tfDownload','rcvBill','rcvPaid','rcvDownload','presidentOnly'];
 const TZ = 'Asia/Vientiane';
 
 // ---------- database ----------
@@ -27,6 +27,7 @@ async function migrate() {
   await q(`create table if not exists fx (id text primary key, no text, date text, by_id text, sort bigserial, data jsonb)`);
   await q(`create table if not exists fx_drafts (user_id text primary key, data jsonb)`);
   await q(`create table if not exists pdfs (doc_id text primary key, file_id text)`);
+  await q(`create table if not exists intl (id text primary key, no text, status text, sort bigserial, data jsonb)`);
   await q(`create table if not exists push_subs (endpoint text primary key, user_id text, sub jsonb)`);
   let v = await kvGet('vapid'); if (!v) { v = webpush.generateVAPIDKeys(); await kvSet('vapid', v); }
   webpush.setVapidDetails('mailto:inboxsole@gmail.com', v.publicKey, v.privateKey); VAPID_PUB = v.publicKey;
@@ -168,7 +169,8 @@ async function badgeMap(ids) {
   const rows = (await q(`select data from docs where status in ('pending','returned') or (status='approved' and type in ('expense','payment','income') and (coalesce(data->'tf'->>'status','new') <> 'done' or data->'tf'->'dl' is null))`)).map(r => r.data);
   const fxRows = (await q(`select data from fx where data->>'status' in ('pending','returned')`)).map(r => r.data);
   const m = {};
-  for (const u of us) { let n = fxRows.filter(x => fxMine(u, x)).length;
+  const intlRows = (await q(`select data from intl where status not in ('done','rejected') or (status = 'done' and data->'dl' is null)`)).map(r => r.data);
+  for (const u of us) { let n = fxRows.filter(x => fxMine(u, x)).length + intlRows.filter(x => intlMine(u, x)).length + intlRows.reduce((t, x) => t + intlDueN(u, x), 0);
     for (const d of rows) {
       if (presOnly(u)) { const td = (o => `${o.year}-${o.month}-${o.day}`)(parts(new Date()));
         if ((d.status === 'pending' && MULTI(d.type) && sg(d) === 3 && canApprove(u, d)) || (d.status === 'returned' && d.createdBy === u.id)
@@ -192,6 +194,25 @@ function docMsg(d, title) {
 }
 // ໄອດີປະທານ: every right, but pushed only for the ປະທານ step.
 function presOnly(u) { return !!(u.perms || {}).presidentOnly; }
+// ໂອນເງິນໄປຕ່າງປະເທດ: sched (ປະທານກຳນົດວັນ) › create (ບັນຊີສ້າງໃບໂອນ) › transfer (ຜູ້ຈັດການໂອນ) › done
+const INTL_PERM = { sched: 'intlSchedule', create: 'intlCreate', transfer: 'intlCreate' };
+const INTL_TITLE = { sched: 'ລໍຖ້າກຳນົດວັນໂອນເງິນໄປຕ່າງປະເທດ', create: 'ລໍຖ້າສ້າງໃບໂອນ (ຕ່າງປະເທດ)', transfer: 'ລໍຖ້າໂອນເງິນໄປຕ່າງປະເທດ' };
+function intlDueN(u, x) { const p = u.perms || {}; if (!p.intlCreate || presOnly(u) || !['create','transfer'].includes(x.status)) return 0;
+  const t = parts(new Date(Date.now() + 864e5)), tom = `${t.year}-${t.month}-${t.day}`;
+  return (x.sends && x.sends.length ? x.sends : [{ date: x.schedDate }]).filter(y => y.date && y.date <= tom && !y.doneAt).length; }
+function intlMine(u, x) { const p = u.perms || {};
+  if (x.status === 'returned') return x.byId === u.id;
+  if (x.status === 'rejected') return false;
+  if (presOnly(u)) return x.status === 'sched';
+  return x.status === 'done' ? !x.dl && !!p.intlDownload : !!p[INTL_PERM[x.status]]; }
+function intlMsg(x, title) { const n = v => (+v || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  return { title, body: 'ໂອນເງິນໄປຕ່າງປະເທດ ' + (x.no || '') + ' · ' + n(x.sendAmt) + ' ' + (x.sendCur || '') + (x.schedDate ? ' · ' + x.schedDate.split('-').reverse().join('/') + ' ' + (x.schedTime || '') : ''), url: './', tag: 'intl-' + x.id }; }
+function notifyIntl(x, me) { later('push', async () => {
+  const us = (await users()).filter(u => u.id !== me.id);
+  if (INTL_PERM[x.status]) await pushTo(us.filter(u => intlMine(u, x)).map(u => u.id), intlMsg(x, INTL_TITLE[x.status]));
+  if ((x.status === 'returned' || x.status === 'rejected') && !x.recalled && x.byId && x.byId !== me.id) await pushTo([x.byId], intlMsg(x, x.status === 'returned' ? 'ໂອນເງິນໄປຕ່າງປະເທດ: ສົ່ງກັບແກ້ໄຂ' : 'ໂອນເງິນໄປຕ່າງປະເທດ: ບໍ່ອະນຸມັດ'));
+  if (x.status === 'done') await pushTo(us.filter(u => u.id === x.byId || (!presOnly(u) && (u.perms || {}).intlDownload)).map(u => u.id), intlMsg(x, 'ໂອນເງິນໄປຕ່າງປະເທດສຳເລັດ'));
+}); }
 function notifyDoc(old, d, me) { later('push', async () => {
   const us = await users(), ids = f => us.filter(u => u.id !== me.id && f(u)).map(u => u.id);
   const pres = presOnly, okStage = u => !pres(u) || (MULTI(d.type) && sg(d) === 3);
@@ -240,7 +261,9 @@ const API = {
   async load(r) {
     const me = await auth(r);
     const [us, docs, projects, customers, epoch] = await Promise.all([users(), visibleDocs(me, r.from || ''), kvGet('projects'), q('select data from customers order by sort'), kvGet('epoch')]);
-    return { users: us.map(pub), docs, projects: projects || [], customers: customers.map(x => x.data), epoch: epoch || '' };
+    const intl = (await q('select data from intl order by sort desc')).map(x => x.data);
+    const intlBanks = (await kvGet('intlBanks')) || [];
+    return { users: us.map(pub), docs, intl, intlBanks, projects: projects || [], customers: customers.map(x => x.data), epoch: epoch || '' };
   },
   async listDocs(r) { return visibleDocs(await auth(r), r.from || ''); },
   async listUsers(r) { await auth(r); return (await users()).map(pub); },
@@ -421,7 +444,42 @@ const API = {
     const me = await auth(r), l = (r.drafts || []).slice(0, 10);
     await q('insert into fx_drafts values ($1,$2) on conflict (user_id) do update set data=excluded.data', [me.id, JSON.stringify(l)]); return true;
   },
-  async savePdfFx(r) { await auth(r); return savePdfVia(r, 'fx'); }
+  async savePdfFx(r) { await auth(r); return savePdfVia(r, 'fx'); },
+  async saveIntl(r) {
+    const me = await auth(r), p = me.perms || {}, x = r.rec || {}, row = (await q('select data from intl where id=$1', [String(x.id)]))[0], old = row ? row.data : null;
+    const from = old ? old.status : 'new', to = x.status;
+    const own = old && old.byId === me.id;
+    const ok = { 'returned>sched': p.intlRecv || own, 'returned>returned': p.intlRecv || own,
+      'sched>returned': p.intlSchedule || presOnly(me) || (own && x.recalled), 'sched>rejected': p.intlSchedule || presOnly(me), 'create>returned': p.intlCreate || (own && x.recalled), 'create>rejected': p.intlCreate,
+      'transfer>returned': p.intlCreate || (own && x.recalled), 'transfer>rejected': p.intlCreate,
+      'new>sched': p.intlRecv, 'sched>sched': p.intlSchedule || presOnly(me), 'sched>create': p.intlSchedule || presOnly(me),
+      'create>create': p.intlCreate, 'create>done': p.intlCreate, 'transfer>done': p.intlCreate || p.intlDone, 'done>done': p.intlDownload || p.print }[from + '>' + to];
+    if (!ok) throw new Error('ບໍ່ມີສິດ');
+    if (from === 'create' && to === 'done' && (x.sends || []).length && !x.sends.every(y => y.doneAt)) throw new Error('ກະລຸນາຕິກ ໂອນແລ້ວ ໃຫ້ຄົບທຸກຄັ້ງກ່ອນ');
+    if (from === 'sched' && to === 'create') {
+      const C = x.sendCur || 'ໂດລາ', sl = (x.sends && x.sends.length ? x.sends : [{ amt: x.sendAmt, cur: C }]);
+      if (sl.some(y => (y.cur || C) !== C) || Math.abs(sl.reduce((t, y) => t + (+y.amt || 0), 0) - (+x.sendAmt || 0)) > 0.005) throw new Error('ລວມທຸກຄັ້ງ ຕ້ອງເທົ່າກັບ ຈຳນວນທີ່ຕ້ອງໂອນ');
+    }
+    if ((to === 'returned' || to === 'rejected') && from !== to && !x.recalled && !String(x.backNote || '').trim() && !x.backVoice && !(x.backImgs || []).length) throw new Error('ກະລຸນາພິມ, ອັດສຽງ ຫຼື ແນບຮູບ');
+    if (!old) { const pp = parts(new Date()), pre = String(+pp.month) + pp.year.slice(2) + 'IT';
+      const n = (await q('select no from intl where no like $1', [pre + '%'])).reduce((m, y) => Math.max(m, +String(y.no).slice(pre.length) || 0), 0);
+      x.no = pre + String(n + 1).padStart(4, '0'); x.byId = me.id; x.createdAt = new Date().toISOString(); }
+    else { x.no = old.no; x.byId = old.byId; x.createdAt = old.createdAt; }
+    await q('insert into intl (id,no,status,data) values ($1,$2,$3,$4) on conflict (id) do update set no=excluded.no, status=excluded.status, data=excluded.data', [String(x.id), x.no, to, JSON.stringify(x)]);
+    if (from !== to) notifyIntl(x, me);
+    return x;
+  },
+  async saveIntlBanks(r) {
+    const me = await auth(r), p = me.perms || {};
+    if (!(p.intlSchedule || p.manageUsers || presOnly(me))) throw new Error('ບໍ່ມີສິດເພີ່ມຊື່ທະນາຄານ');
+    const l = [...new Set((r.list || []).map(x => String(x).trim()).filter(Boolean))]; await kvSet('intlBanks', l); return l;
+  },
+  async deleteIntl(r) {
+    const me = await auth(r), p = me.perms || {}, row = (await q('select data from intl where id=$1', [String(r.id)]))[0];
+    if (!row) return true;
+    if (!['sched','returned'].includes(row.data.status) || !(p.intlRecv || row.data.byId === me.id)) throw new Error('ລຶບໄດ້ສະເພາະລາຍການທີ່ຍັງບໍ່ກຳນົດວັນ');
+    await q('delete from intl where id=$1', [String(r.id)]); return true;
+  }
 };
 
 // Writes run one at a time (like the old script lock) so numbers never collide.
@@ -465,6 +523,27 @@ async function overdueCheck() {
   const ids = (await users()).filter(u => (u.perms || {}).rcvOverdue || presOnly(u)).map(u => u.id);
   for (const d of rows) await pushTo(ids, docMsg(d, 'ບິນກາຍກຳນົດ · ຄົບກຳນົດ ' + d.fields.dueDate.split('-').reverse().join('/')));
 }
+// From 07:00 Vientiane: remind whoever may transfer — the day before (ມື້ອື່ນ) and on the day (ວັນນີ້). Rows already ticked ໂອນແລ້ວ are skipped.
+async function intlDayCheck() {
+  const p = parts(new Date()), today = `${p.year}-${p.month}-${p.day}`, hour = +new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', hour12: false }).format(new Date());
+  if (hour < 7 || (await kvGet('intlDay')) === today) return;
+  await kvSet('intlDay', today);
+  const t2 = parts(new Date(Date.now() + 864e5)), tomorrow = `${t2.year}-${t2.month}-${t2.day}`;
+  const rows = (await q("select data from intl where status in ('sched','create','transfer')")).map(r => r.data);
+  const ids = (await users()).filter(u => !presOnly(u) && (u.perms || {}).intlCreate).map(u => u.id);
+  const dmy = d => d.split('-').reverse().join('/');
+  for (const x of rows) {
+    const all = (x.sends && x.sends.length ? x.sends : [{ date: x.schedDate, amt: x.sendAmt, cur: x.sendCur, acc: x.srcAcc }]).map((y, i) => ({ ...y, n: i + 1 })).filter(y => !y.doneAt);
+    const many = (x.sends || []).length > 1;
+    for (const [day, word] of [[tomorrow, 'ມື້ອື່ນ'], [today, 'ວັນນີ້']]) {
+      if (x.status === 'sched' && word === 'ວັນນີ້') continue;
+      for (const y of all.filter(z => z.date === day)) await pushTo(ids, { ...intlMsg(x, word + 'ຕ້ອງໂອນເງິນໄປຕ່າງປະເທດ' + (many ? ' · ຄັ້ງ ' + y.n : '')),
+        body: 'ໂອນເງິນໄປຕ່າງປະເທດ ' + (x.no || '') + ' · ' + dmy(day) + ' · ' + (+y.amt || 0).toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' ' + (y.cur || '') + (y.acc ? ' · ຈາກ ' + y.acc : ''),
+        tag: 'intl-' + x.id + '-' + y.n + '-' + (word === 'ມື້ອື່ນ' ? 'd1' : 'd0') });
+    }
+  }
+}
 setInterval(() => overdueCheck().catch(e => console.warn('overdue', e.message)), 15 * 60 * 1000);
+setInterval(() => intlDayCheck().catch(e => console.warn('intlDay', e.message)), 15 * 60 * 1000);
 migrate().then(() => app.listen(ENV.PORT || 8080, () => console.log('INBOX server on', ENV.PORT || 8080)))
   .catch(e => { console.error('startup failed:', e); process.exit(1); });
