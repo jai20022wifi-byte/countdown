@@ -311,7 +311,7 @@ const API = {
   async saveDoc(r) {
     const me = await auth(r), d = r.doc, old = await getDoc(d.id);
     if (!old && !(d.type === 'quote' ? me.perms.createQuote : me.perms.createExpense)) throw new Error('ບໍ່ມີສິດສ້າງເອກະສານ');
-    const recall = old && old.status === 'pending' && d.status === 'returned' && old.createdBy === me.id;
+    const recall = old && d.status === 'returned' && ((old.status === 'pending' && old.createdBy === me.id) || (old.status === 'rejected' && presOnly(me)));
     // ໃບລາຍຈ່າຍ: the creator sends it straight to the manager for an urgent transfer (no approval steps).
     const fast = d.type === 'payment' && (d.fields || {}).kind === 'fast' && d.status === 'approved' && (!old ? true : old.createdBy === me.id && old.status !== 'approved');
     if (old && old.status !== d.status && ['approved', 'rejected', 'returned'].includes(d.status) && !canApprove(me, old) && !recall && !fast) throw new Error('ບໍ່ມີສິດອະນຸມັດ');
@@ -450,6 +450,7 @@ const API = {
     const ok = { 'returned>sched': p.intlRecv || own, 'returned>returned': p.intlRecv || own,
       'sched>returned': p.intlSchedule || presOnly(me) || (own && x.recalled), 'sched>rejected': p.intlSchedule || presOnly(me), 'create>returned': p.intlCreate || (own && x.recalled), 'create>rejected': p.intlCreate,
       'transfer>returned': p.intlCreate || (own && x.recalled), 'transfer>rejected': p.intlCreate,
+      'rejected>returned': presOnly(me) && x.recalled,
       'new>sched': p.intlRecv, 'sched>sched': p.intlSchedule || presOnly(me), 'sched>create': p.intlSchedule || presOnly(me),
       'create>create': p.intlCreate, 'create>done': p.intlCreate, 'transfer>done': p.intlCreate || p.intlDone, 'done>done': p.intlDownload || p.print }[from + '>' + to];
     if (!ok) throw new Error('ບໍ່ມີສິດ');
