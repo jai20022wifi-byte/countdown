@@ -28,6 +28,8 @@ async function migrate() {
   await q(`create table if not exists fx_drafts (user_id text primary key, data jsonb)`);
   await q(`create table if not exists pdfs (doc_id text primary key, file_id text)`);
   await q(`create table if not exists intl (id text primary key, no text, status text, sort bigserial, data jsonb)`);
+  await q(`create table if not exists cash_accs (id text primary key, sort bigserial, data jsonb)`);
+  await q(`create table if not exists cash_moves (id text primary key, sort bigserial, data jsonb)`);
   await q(`create table if not exists push_subs (endpoint text primary key, user_id text, sub jsonb)`);
   let v = await kvGet('vapid'); if (!v) { v = webpush.generateVAPIDKeys(); await kvSet('vapid', v); }
   webpush.setVapidDetails('mailto:inboxsole@gmail.com', v.publicKey, v.privateKey); VAPID_PUB = v.publicKey;
@@ -153,9 +155,9 @@ function tfParts(tf, T) { tf = tf || {}; if (Array.isArray(tf.parts)) return tf.
 function applyTf(tf0, T, op, me, now) {
   const tf = { ...(tf0 || {}) }; let parts = tfParts(tf0, T).map(p => ({ ...p }));
   if (!Array.isArray((tf0 || {}).parts) && (tf0 || {}).status && (tf0 || {}).status !== 'new') tf.img = null;
-  if (op.status === 'created') { parts.push({ id: op.pid || ('p' + Date.now()), amt: +op.amt, img: op.img || null, status: 'created', by: me, at: now }); tf.img = null; }
-  if (op.status === 'paid') { parts.push({ id: op.pid || ('p' + Date.now()), amt: +op.amt, img: op.img || null, status: 'done', by: me, at: now, doneBy: me, doneAt: now }); tf.img = null; }
-  if (op.status === 'done') { let hit = false; parts = parts.map(p => !hit && p.status === 'created' && (!op.partId || p.id === op.partId) ? (hit = true, { ...p, status: 'done', doneBy: me, doneAt: now }) : p); }
+  if (op.status === 'created') { parts.push({ id: op.pid || ('p' + Date.now()), amt: +op.amt, img: op.img || null, acc: op.acc || '', status: 'created', by: me, at: now }); tf.img = null; }
+  if (op.status === 'paid') { parts.push({ id: op.pid || ('p' + Date.now()), amt: +op.amt, img: op.img || null, acc: op.acc || '', status: 'done', by: me, at: now, doneBy: me, doneAt: now }); tf.img = null; }
+  if (op.status === 'done') { let hit = false; parts = parts.map(p => !hit && p.status === 'created' && (!op.partId || p.id === op.partId) ? (hit = true, { ...p, acc: p.acc || op.acc || '', status: 'done', doneBy: me, doneAt: now }) : p); }
   tf.parts = parts; tf.total = +T || 0;
   const alloc = parts.reduce((a, p) => a + (+p.amt || 0), 0), paid = parts.filter(p => p.status === 'done').reduce((a, p) => a + (+p.amt || 0), 0);
   if (tf.total > 0 && paid >= tf.total - EPS) { tf.status = 'done'; tf.doneBy = me; tf.doneAt = now; }
@@ -263,7 +265,9 @@ const API = {
     const [us, docs, projects, customers, epoch] = await Promise.all([users(), visibleDocs(me, r.from || ''), kvGet('projects'), q('select data from customers order by sort'), kvGet('epoch')]);
     const intl = (await q('select data from intl order by sort desc')).map(x => x.data);
     const intlBanks = (await kvGet('intlBanks')) || [];
-    return { users: us.map(pub), docs, intl, intlBanks, projects: projects || [], customers: customers.map(x => x.data), epoch: epoch || '' };
+    const cp = me.perms || {}, cashOk = cp.cashView || cp.cashEdit || cp.manageUsers;
+    const cashAccs = cashOk ? (await q('select data from cash_accs order by sort')).map(x => x.data) : [], cashMoves = cashOk ? (await q('select data from cash_moves order by sort')).map(x => x.data) : [];
+    return { users: us.map(pub), docs, intl, intlBanks, cashAccs, cashMoves, projects: projects || [], customers: customers.map(x => x.data), epoch: epoch || '' };
   },
   async listDocs(r) { return visibleDocs(await auth(r), r.from || ''); },
   async listUsers(r) { await auth(r); return (await users()).map(pub); },
@@ -299,7 +303,8 @@ const API = {
     const old = (await q('select id from users where id=$1', [String(u.id)]))[0];
     if (!old) { await addUser(u); return true; }
     await q('update users set name=$2, perms=$3, sig=$4, pos=$5 where id=$1', [u.id, u.name, JSON.stringify(u.perms), u.sig || '', u.pos || '']);
-    if (u.pw) { const salt = crypto.randomUUID(); await q('update users set pw_hash=$2, salt=$3 where id=$1', [u.id, hash(u.pw, salt), salt]); }
+    if (u.pw) { const salt = crypto.randomUUID(); await q('update users set pw_hash=$2, salt=$3 where id=$1', [u.id, hash(u.pw, salt), salt]);
+      if (u.id !== me.id) await q('delete from sessions where user_id=$1', [u.id]); }
     return true;
   },
   async deleteUser(r) {
@@ -359,7 +364,7 @@ const API = {
         if (!img) throw new Error('ກະລຸນາແນບຮູບສະລິບກ່ອນ');
         if (!(amt > 0)) throw new Error('ກະລຸນາໃສ່ຈຳນວນເງິນ');
         if (T1 > 0 && amt > left + EPS) throw new Error('ຈຳນວນເງິນເກີນຍອດທີ່ເຫຼືອ');
-        d.tf = applyTf({ ...tf0, billed: tf0.billed || { by: me.id, at: now } }, T1, { status: 'paid', amt, img, pid: r.tf.pid }, me.id, now);
+        d.tf = applyTf({ ...tf0, billed: tf0.billed || { by: me.id, at: now } }, T1, { status: 'paid', amt, img, pid: r.tf.pid, acc: String(r.tf.acc || '') }, me.id, now);
       }
       await putDoc(d);
       later('push', async () => {
@@ -381,10 +386,10 @@ const API = {
       const left = T - parts0.reduce((x, y) => x + (+y.amt || 0), 0);
       if (!(amt > 0)) throw new Error('ກະລຸນາໃສ່ຈຳນວນເງິນ');
       if (T > 0 && amt > left + EPS) throw new Error('ຈຳນວນເງິນເກີນຍອດທີ່ເຫຼືອ');
-      d.tf = applyTf(tf0, T, { status: 'created', amt, img, pid: r.tf.pid }, me.id, now);
+      d.tf = applyTf(tf0, T, { status: 'created', amt, img, pid: r.tf.pid, acc: String(r.tf.acc || '') }, me.id, now);
     } else {
       if (!parts0.some(x => x.status === 'created' && (!r.tf.partId || x.id === r.tf.partId))) return tf0;
-      d.tf = applyTf(tf0, T, { status: 'done', partId: r.tf.partId }, me.id, now);
+      d.tf = applyTf(tf0, T, { status: 'done', partId: r.tf.partId, acc: String(r.tf.acc || '') }, me.id, now);
     }
     await putDoc(d);
     if (d.type !== 'income') later('push', async () => {
@@ -472,6 +477,33 @@ const API = {
     const me = await auth(r), p = me.perms || {};
     if (!(p.intlSchedule || p.manageUsers || presOnly(me))) throw new Error('ບໍ່ມີສິດເພີ່ມຊື່ທະນາຄານ');
     const l = [...new Set((r.list || []).map(x => String(x).trim()).filter(Boolean))]; await kvSet('intlBanks', l); return l;
+  },
+  // ຊັບສິນ › ບັນຊີເງິນ
+  async saveCashAcc(r) {
+    const me = await auth(r), p = me.perms || {}; if (!(p.cashEdit || p.manageUsers)) throw new Error('ບໍ່ມີສິດຈັດການບັນຊີເງິນ');
+    const x = r.rec || {}; if (!x.id || !String(x.name || '').trim()) throw new Error('ຂໍ້ມູນບັນຊີບໍ່ຄົບ');
+    const old = (await q('select data from cash_accs where id=$1', [String(x.id)]))[0];
+    if (old && old.data.cur !== x.cur && (await q("select 1 from cash_moves where data->>'from'=$1 or data->>'to'=$1 limit 1", [String(x.id)])).length) throw new Error('ປ່ຽນສະກຸນເງິນບໍ່ໄດ້ ເພາະມີລາຍການແລ້ວ');
+    x.open = +x.open || 0; x.by = old ? old.data.by : me.id;
+    await q('insert into cash_accs (id,data) values ($1,$2) on conflict (id) do update set data=excluded.data', [String(x.id), JSON.stringify(x)]); return x;
+  },
+  async deleteCashAcc(r) {
+    const me = await auth(r), p = me.perms || {}; if (!(p.cashEdit || p.manageUsers)) throw new Error('ບໍ່ມີສິດຈັດການບັນຊີເງິນ');
+    if ((await q("select 1 from cash_moves where data->>'from'=$1 or data->>'to'=$1 limit 1", [String(r.id)])).length) throw new Error('ລຶບບໍ່ໄດ້ ເພາະບັນຊີນີ້ມີລາຍການແລ້ວ');
+    await q('delete from cash_accs where id=$1', [String(r.id)]); return true;
+  },
+  async saveCashMove(r) {
+    const me = await auth(r), p = me.perms || {}; if (!(p.cashEdit || p.manageUsers)) throw new Error('ບໍ່ມີສິດບັນທຶກການໂອນ');
+    const x = r.rec || {}; if (!x.id || !['in','out','tf'].includes(x.kind) || !(+x.amt > 0) || !x.date) throw new Error('ຂໍ້ມູນບໍ່ຄົບ');
+    const ids = [x.from, x.to].filter(Boolean); for (const id of ids) if (!(await q('select 1 from cash_accs where id=$1', [String(id)])).length) throw new Error('ບໍ່ພົບບັນຊີ');
+    if (x.kind === 'tf' && (!x.from || !x.to || x.from === x.to)) throw new Error('ບັນຊີໂອນບໍ່ຖືກ');
+    x.by = me.id; x.byName = me.name; x.at = new Date().toISOString(); x.link = x.link ? String(x.link) : '';
+    if (x.link && (await q("select 1 from cash_moves where data->>'link'=$1 limit 1", [x.link])).length) throw new Error('ລາຍການນີ້ລະບຸບັນຊີແລ້ວ');
+    await q('insert into cash_moves (id,data) values ($1,$2) on conflict (id) do nothing', [String(x.id), JSON.stringify(x)]); return x;
+  },
+  async deleteCashMove(r) {
+    const me = await auth(r), p = me.perms || {}; if (!(p.cashEdit || p.manageUsers)) throw new Error('ບໍ່ມີສິດລຶບ');
+    await q('delete from cash_moves where id=$1', [String(r.id)]); return true;
   },
   async deleteIntl(r) {
     const me = await auth(r), p = me.perms || {}, row = (await q('select data from intl where id=$1', [String(r.id)]))[0];
