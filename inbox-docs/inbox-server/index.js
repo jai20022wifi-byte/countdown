@@ -139,6 +139,12 @@ function fxMine(u, x) { const p = u.perms || {};
   if (presOnly(u) && fxSg(x) !== 2) return false;
   return !!p[(FX_STAGE[fxSg(x)] || FX_STAGE[1])[1]]; }
 function fxMsg(x, title) { return { title, body: 'ໃບແລກປ່ຽນເງິນ ' + (x.no || '') + (x.subject ? ' · ' + x.subject : ''), url: './', tag: 'fx-' + x.id }; }
+// ລົງເລກບັນຊີ belongs to ກວດສອບ (position or tick); ສ້າງ ແລະ ໂອນ steps of ໂຍກຍ້າຍ / ແລກປ່ຽນເງິນ use the same rights as ໃບລາຍຈ່າຍ.
+const acctReady = d => { const tf = d.tf || {}; return d.type === 'income' ? !!tf.billed || tf.status === 'done' : tf.status === 'created' || tf.status === 'done' || (Array.isArray(tf.parts) && tf.parts.length > 0); };
+const isChk = u => u.pos === 'ກວດສອບ' || !!(u.perms || {}).rpCheck;
+const canTfCreate = u => u.pos === 'ບັນຊີ' || !!(u.perms || {}).tfCreate, canTfDone = u => u.pos === 'ຜູ້ຈັດການ' || !!(u.perms || {}).tfDone;
+function fxTfMine(u, x) { if (presOnly(u) || fxSt(x) !== 'approved' || !x.tf) return false; const s = x.tf.status;
+  return (s === 'new' && canTfCreate(u)) || (s === 'created' && canTfDone(u)) || (s === 'done' && !x.tf.dl && !!(u.perms || {}).tfDownload); }
 function notifyFx(old, x, me) { later('push', async () => {
   const us = await users(), ids = f => us.filter(u => u.id !== me.id && f(u)).map(u => u.id);
   if (fxSt(x) === 'pending' && (!old || fxSt(old) !== 'pending' || fxSg(old) !== fxSg(x)))
@@ -146,6 +152,12 @@ function notifyFx(old, x, me) { later('push', async () => {
   if (old && fxSt(old) !== fxSt(x) && x.byId && x.byId !== me.id) {
     const t = { returned: 'ໃບແລກປ່ຽນເງິນຖືກສົ່ງກັບແກ້ໄຂ', rejected: 'ໃບແລກປ່ຽນເງິນບໍ່ອະນຸມັດ', approved: 'ໃບແລກປ່ຽນເງິນອະນຸມັດແລ້ວ' }[fxSt(x)];
     if (t) await pushTo([x.byId], fxMsg(x, t)); }
+  const os = old && old.tf ? old.tf.status : '', ns = x.tf && fxSt(x) === 'approved' ? x.tf.status : '';
+  if (ns && ns !== os) {
+    if (ns === 'new') await pushTo(ids(u => !presOnly(u) && canTfCreate(u)), fxMsg(x, 'ລໍຖ້າສ້າງໃບໂອນ'));
+    if (ns === 'created') await pushTo(ids(u => !presOnly(u) && canTfDone(u)), fxMsg(x, 'ລໍຖ້າໂອນເງິນ'));
+    if (ns === 'done') await pushTo(ids(u => !presOnly(u) && ((u.perms || {}).tfDownload || u.id === x.byId)), fxMsg(x, 'ໂອນເງິນສຳເລັດແລ້ວ'));
+  }
 }); }
 // Transfers can be paid in several installments (tf.parts). Old single transfers become one part for the full amount.
 const EPS = 0.005;
@@ -168,11 +180,12 @@ function applyTf(tf0, T, op, me, now) {
 // Work waiting for each user — shown as the number on the app icon.
 async function badgeMap(ids) {
   const us = (await users()).filter(u => ids.includes(u.id));
-  const rows = (await q(`select data from docs where status in ('pending','returned') or (status='approved' and type in ('expense','payment','income') and (coalesce(data->'tf'->>'status','new') <> 'done' or data->'tf'->'dl' is null))`)).map(r => r.data);
+  const rows = (await q(`select data from docs where status in ('pending','returned') or (status='approved' and type in ('expense','payment','income') and (coalesce(data->'tf'->>'status','new') <> 'done' or data->'tf'->'dl' is null or coalesce(data->>'acct','') = ''))`)).map(r => r.data);
   const fxRows = (await q(`select data from fx where data->>'status' in ('pending','returned')`)).map(r => r.data);
   const m = {};
   const intlRows = (await q(`select data from intl where status not in ('done','rejected') or (status = 'done' and data->'dl' is null)`)).map(r => r.data);
-  for (const u of us) { let n = fxRows.filter(x => fxMine(u, x)).length + intlRows.filter(x => intlMine(u, x)).length + intlRows.reduce((t, x) => t + intlDueN(u, x), 0);
+  const fxTf = (await q(`select data from fx where coalesce(data->>'status','approved') = 'approved' and data->'tf' is not null and (data->'tf'->>'status' <> 'done' or data->'tf'->'dl' is null)`)).map(r => r.data);
+  for (const u of us) { let n = fxRows.filter(x => fxMine(u, x)).length + fxTf.filter(x => fxTfMine(u, x)).length + intlRows.filter(x => intlMine(u, x)).length + intlRows.reduce((t, x) => t + intlDueN(u, x), 0);
     for (const d of rows) {
       if (presOnly(u)) { const td = (o => `${o.year}-${o.month}-${o.day}`)(parts(new Date()));
         if ((d.status === 'pending' && MULTI(d.type) && sg(d) === 3 && canApprove(u, d)) || (d.status === 'returned' && d.createdBy === u.id)
@@ -181,9 +194,10 @@ async function badgeMap(ids) {
       else if (d.status === 'returned') { if (d.createdBy === u.id) n++; }
       else if (d.type === 'income') { const tf = d.tf || {}, p = u.perms || {}, td = (o => `${o.year}-${o.month}-${o.day}`)(parts(new Date()));
         if (tf.status !== 'done' && p.rcvOverdue && d.fields && d.fields.dueDate && d.fields.dueDate < td) n++;
-        if (tf.status === 'done') { if (!tf.dl && p.rcvDownload) n++; } else if (tf.billed) { if (p.rcvPaid) n++; } else if (p.rcvBill) n++; }
+        if (!d.acct && acctReady(d) && isChk(u)) n++; if (tf.status === 'done') { if (!tf.dl && p.rcvDownload) n++; } else if (tf.billed) { if (p.rcvPaid) n++; } else if (p.rcvBill) n++; }
       else { const st = (d.tf || {}).status, p = u.perms || {}, pend = tfParts(d.tf, (d.tf || {}).total).filter(x => x.status === 'created').length;
-        if ((!st || st === 'new') && p.tfCreate) n++; if (p.tfDone) n += pend; if (st === 'done' && !(d.tf || {}).dl && p.tfDownload) n++; }
+        if ((!st || st === 'new') && canTfCreate(u)) n++; if (canTfDone(u)) n += pend;
+        if (!d.acct && acctReady(d) && isChk(u)) n++; if (st === 'done' && !(d.tf || {}).dl && p.tfDownload) n++; }
     }
     m[u.id] = n; }
   return m;
@@ -206,12 +220,14 @@ function intlMine(u, x) { const p = u.perms || {};
   if (x.status === 'returned') return x.byId === u.id;
   if (x.status === 'rejected') return false;
   if (presOnly(u)) return x.status === 'sched';
+  if (x.status === 'transfer') return !!(p.intlCreate || p.intlDone);
   return x.status === 'done' ? !x.dl && !!p.intlDownload : !!p[INTL_PERM[x.status]]; }
 function intlMsg(x, title) { const n = v => (+v || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
   return { title, body: 'ໂອນເງິນໄປຕ່າງປະເທດ ' + (x.no || '') + ' · ' + n(x.sendAmt) + ' ' + (x.sendCur || '') + (x.schedDate ? ' · ' + x.schedDate.split('-').reverse().join('/') + ' ' + (x.schedTime || '') : ''), url: './', tag: 'intl-' + x.id }; }
 function notifyIntl(x, me) { later('push', async () => {
   const us = (await users()).filter(u => u.id !== me.id);
   if (INTL_PERM[x.status]) await pushTo(us.filter(u => intlMine(u, x)).map(u => u.id), intlMsg(x, INTL_TITLE[x.status]));
+  if (x.status === 'done' && !x.dl) await pushTo(us.filter(u => !presOnly(u) && ((u.perms || {}).intlDownload || u.id === x.byId)).map(u => u.id), intlMsg(x, 'ໂອນເງິນໄປຕ່າງປະເທດສຳເລັດ'));
   if ((x.status === 'returned' || x.status === 'rejected') && !x.recalled && x.byId && x.byId !== me.id) await pushTo([x.byId], intlMsg(x, x.status === 'returned' ? 'ໂອນເງິນໄປຕ່າງປະເທດ: ສົ່ງກັບແກ້ໄຂ' : 'ໂອນເງິນໄປຕ່າງປະເທດ: ບໍ່ອະນຸມັດ'));
   if (x.status === 'done') await pushTo(us.filter(u => u.id === x.byId || (!presOnly(u) && (u.perms || {}).intlDownload)).map(u => u.id), intlMsg(x, 'ໂອນເງິນໄປຕ່າງປະເທດສຳເລັດ'));
 }); }
@@ -225,7 +241,7 @@ function notifyDoc(old, d, me) { later('push', async () => {
     if (t) await pushTo([d.createdBy], docMsg(d, t));
   }
   if (d.status === 'approved' && (!old || old.status !== 'approved') && (d.type === 'expense' || d.type === 'payment'))
-    await pushTo(ids(u => !pres(u) && (u.perms || {}).tfCreate), docMsg(d, 'ລໍຖ້າສ້າງໃບໂອນ'));
+    await pushTo(ids(u => !pres(u) && canTfCreate(u)), docMsg(d, 'ລໍຖ້າສ້າງໃບໂອນ'));
 }); }
 
 // ---------- API ----------
@@ -267,7 +283,15 @@ const API = {
     const intlBanks = (await kvGet('intlBanks')) || [];
     const cp = me.perms || {}, cashOk = cp.cashView || cp.cashEdit || cp.manageUsers;
     const cashAccs = cashOk ? (await q('select data from cash_accs order by sort')).map(x => x.data) : [], cashMoves = cashOk ? (await q('select data from cash_moves order by sort')).map(x => x.data) : [];
-    return { users: us.map(pub), docs, intl, intlBanks, cashAccs, cashMoves, projects: projects || [], customers: customers.map(x => x.data), epoch: epoch || '' };
+    const acct = Object.fromEntries(await Promise.all(['jv','ob','coa','cfg','fx'].map(async k => [k, await kvGet('acct_' + k)])));
+    return { users: us.map(pub), docs, intl, intlBanks, cashAccs, cashMoves, acct, projects: projects || [], customers: customers.map(x => x.data), epoch: epoch || '' };
+  },
+  // ບັນຊີ data shared by every device: ບັນຊີປະຈຳວັນ, ຍອດຍົກມາ, ເລກລະຫັດບັນຊີ edits, auto-posting settings, exchange rates (with history).
+  async acctSave(r) {
+    const me = await auth(r), k = String(r.key || '');
+    if (!['jv','ob','coa','cfg','fx'].includes(k)) throw new Error('bad key');
+    if (k !== 'fx' && k !== 'jv' && !((me.perms || {}).manageUsers || (me.perms || {}).cashEdit || (me.perms || {}).acctEdit)) throw new Error('ບໍ່ມີສິດແກ້ຂໍ້ມູນບັນຊີ');
+    await kvSet('acct_' + k, r.data ?? null); return true;
   },
   async listDocs(r) { return visibleDocs(await auth(r), r.from || ''); },
   async listUsers(r) { await auth(r); return (await users()).map(pub); },
@@ -320,18 +344,26 @@ const API = {
     // ໃບລາຍຈ່າຍ: the creator sends it straight to the manager for an urgent transfer (no approval steps).
     const fast = d.type === 'payment' && (d.fields || {}).kind === 'fast' && d.status === 'approved' && (!old ? true : old.createdBy === me.id && old.status !== 'approved');
     if (old && old.status !== d.status && ['approved', 'rejected', 'returned'].includes(d.status) && !canApprove(me, old) && !recall && !fast) throw new Error('ບໍ່ມີສິດອະນຸມັດ');
-    if (old && old.status === 'approved' && !canApprove(me, old)) throw new Error('ເອກະສານອະນຸມັດແລ້ວ ແກ້ໄຂບໍ່ໄດ້');
+    // ລົງເລກບັນຊີ on an approved doc: ກວດສອບ (or admin) may change only the account fields.
+    const strip = x => { const { acct, acctBy, acctAt, history, ...rest } = x || {}; return JSON.stringify(rest); };
+    const oh = (old && old.history) || [], nh = d.history || [];
+    const acctOnly = old && old.status === 'approved' && d.status === 'approved' && strip(old) === strip(d)
+      && nh.length >= oh.length && JSON.stringify(nh.slice(0, oh.length)) === JSON.stringify(oh) && nh.slice(oh.length).every(x => x && x.action === 'acct');
+    if (acctOnly && !(isChk(me) || (me.perms || {}).manageUsers || canApprove(me, old))) throw new Error('ບໍ່ມີສິດລົງເລກບັນຊີ');
+    if (old && old.status === 'approved' && !acctOnly && !canApprove(me, old)) throw new Error('ເອກະສານອະນຸມັດແລ້ວ ແກ້ໄຂບໍ່ໄດ້');
     if (old && MULTI(old.type) && old.status === 'pending' && d.status === 'pending' && sg(d) > sg(old) && !canApprove(me, old)) throw new Error('ບໍ່ມີສິດຜ່ານຂັ້ນຕອນນີ້');
     if (!old) { d.createdBy = me.id; d.no = await tmpNo(); }
     if (old && d.status !== 'approved') d.no = old.no;
     const fresh = d.status === 'approved' && (!old || old.status !== 'approved');
     if (fresh) d.no = await nextNo(d.type);
+    if (false && fresh) later('push', async () => { const us = await users();
+      await pushTo(us.filter(u => u.id !== me.id && !presOnly(u) && isChk(u)).map(u => u.id), docMsg(d, 'ລໍຖ້າລົງເລກບັນຊີ')); });
     if (old && old.tf && !d.tf) d.tf = old.tf;
     await putDoc(d);
     notifyDoc(old, d, me);
     if (old && old.status === 'approved' && d.status !== 'approved') dropPdf(String(d.id));
     if (fresh && fast) later('push', async () => { const us = await users();
-      await pushTo(us.filter(u => u.id !== me.id && !presOnly(u) && (u.perms || {}).tfDone).map(u => u.id), docMsg(d, 'ລາຍຈ່າຍດ່ວນ · ລໍຖ້າໂອນເງິນ')); });
+      await pushTo(us.filter(u => u.id !== me.id && !presOnly(u) && canTfDone(u)).map(u => u.id), docMsg(d, 'ລາຍຈ່າຍດ່ວນ · ລໍຖ້າໂອນເງິນ')); });
     if (fresh && d.type === 'income') later('push', async () => { const us = await users();
       await pushTo(us.filter(u => u.id !== me.id && !presOnly(u) && (u.perms || {}).rcvBill).map(u => u.id), docMsg(d, 'ໃບເກັບເງິນອະນຸມັດແລ້ວ · ລໍຖ້າວາງບິນ')); });
     return d;
@@ -369,8 +401,8 @@ const API = {
       await putDoc(d);
       later('push', async () => {
         const us = await users(), ids = f => us.filter(u => u.id !== me.id && !presOnly(u) && f(u)).map(u => u.id), cr = d.createdBy;
-        if (st === 'billed') await pushTo(ids(u => (u.perms || {}).rcvPaid), docMsg(d, 'ວາງບິນແລ້ວ · ລໍຖ້າຮັບເງິນ'));
-        else if (d.tf.status === 'done') await pushTo(ids(u => (u.perms || {}).rcvDownload || u.id === cr), docMsg(d, 'ຮັບເງິນຄົບແລ້ວ'));
+        if (st === 'billed') { await pushTo(ids(u => (u.perms || {}).rcvPaid), docMsg(d, 'ວາງບິນແລ້ວ · ລໍຖ້າຮັບເງິນ')); if (!d.acct) await pushTo(ids(u => isChk(u)), docMsg(d, 'ວາງບິນແລ້ວ · ລໍຖ້າລົງເລກບັນຊີ')); }
+        else if (d.tf.status === 'done') { await pushTo(ids(u => (u.perms || {}).rcvDownload || u.id === cr), docMsg(d, 'ຮັບເງິນຄົບແລ້ວ')); if (!d.acct) await pushTo(ids(u => isChk(u)), docMsg(d, 'ຮັບເງິນຄົບແລ້ວ · ຍັງບໍ່ໄດ້ລົງເລກບັນຊີ')); }
         else { const paid = tfParts(d.tf, T1).filter(x => x.status === 'done').reduce((a, x) => a + (+x.amt || 0), 0);
           await pushTo(ids(u => u.id === cr), docMsg(d, 'ຮັບເງິນງວດນີ້ແລ້ວ · ຍັງເຫຼືອ ' + Math.round((T1 - paid) * 100) / 100 + ' ' + (d.currency || 'ກີບ'))); }
       });
@@ -394,9 +426,11 @@ const API = {
     await putDoc(d);
     if (d.type !== 'income') later('push', async () => {
       const us = await users(), ids = f => us.filter(u => u.id !== me.id && f(u)).map(u => u.id);
-      if (st === 'created') await pushTo(ids(u => !presOnly(u) && (u.perms || {}).tfDone), docMsg(d, 'ລໍຖ້າໂອນເງິນ'));
-      if (st === 'done' && d.tf.status === 'done') await pushTo(ids(u => !presOnly(u) && ((u.perms || {}).tfDownload || u.id === d.createdBy)), docMsg(d, 'ໂອນເງິນສຳເລັດແລ້ວ'));
-      if (st === 'done' && d.tf.status !== 'done') await pushTo(ids(u => !presOnly(u) && (u.perms || {}).tfCreate), docMsg(d, 'ໂອນງວດນີ້ແລ້ວ · ຍັງເຫຼືອ'));
+      if (st === 'created') { await pushTo(ids(u => !presOnly(u) && canTfDone(u)), docMsg(d, 'ລໍຖ້າໂອນເງິນ')); if (!d.acct) await pushTo(ids(u => !presOnly(u) && isChk(u)), docMsg(d, 'ສ້າງໃບໂອນແລ້ວ · ລໍຖ້າລົງເລກບັນຊີ')); }
+      if (st === 'done' && d.tf.status === 'done') await pushTo(ids(u => !presOnly(u) && (u.perms || {}).tfDownload), docMsg(d, 'ໂອນເງິນສຳເລັດ · ລໍຖ້າດາວໂຫຼດ PDF'));
+      if (st === 'done' && d.tf.status === 'done' && !d.acct) await pushTo(ids(u => !presOnly(u) && isChk(u)), docMsg(d, 'ໂອນເງິນສຳເລັດ · ຍັງບໍ່ໄດ້ລົງເລກບັນຊີ'));
+      if (st === 'done' && d.tf.status === 'done') await pushTo(ids(u => !presOnly(u) && u.id === d.createdBy), docMsg(d, 'ໂອນເງິນສຳເລັດແລ້ວ'));
+      if (st === 'done' && d.tf.status !== 'done') await pushTo(ids(u => !presOnly(u) && canTfCreate(u)), docMsg(d, 'ໂອນງວດນີ້ແລ້ວ · ຍັງເຫຼືອ'));
     });
     return d.tf;
   },
