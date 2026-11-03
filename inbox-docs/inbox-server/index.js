@@ -209,6 +209,11 @@ function docMsg(d, title) {
   return { title, body: `${TYPE_NAME[d.type] || 'ເອກະສານ'} ${d.no || ''}${t ? ' · ' + t : ''}`, url: './?doc=' + encodeURIComponent(d.id), doc: String(d.id), tag: 'doc-' + d.id };
 }
 // ໄອດີປະທານ: every right, but pushed only for the ປະທານ step.
+// Approved ລາຍຈ່າຍ whose transfer has not started (or an ອມພ not yet ໂອນສຳເລັດ) may still be pulled back or deleted.
+const isPres = u => u.pos === 'ປະທານ' || presOnly(u) || !!(u.perms || {}).rpPresident;
+function fastOpen(x) { const tf = x.tf || {}, parts = tf.parts || [], fast = x.type === 'payment' && (x.fields || {}).kind === 'fast';
+  if (!['payment','expense'].includes(x.type) || x.status !== 'approved' || tf.status === 'done' || parts.some(p => p.status === 'done')) return false;
+  return fast || (!parts.length && tf.status !== 'created'); }
 function presOnly(u) { return !!(u.perms || {}).presidentOnly; }
 // ໂອນເງິນໄປຕ່າງປະເທດ: sched (ປະທານກຳນົດວັນ) › create (ບັນຊີສ້າງໃບໂອນ) › transfer (ຜູ້ຈັດການໂອນ) › done
 const INTL_PERM = { sched: 'intlSchedule', create: 'intlCreate', transfer: 'intlCreate' };
@@ -342,6 +347,8 @@ const API = {
     if (!old && !(d.type === 'quote' ? me.perms.createQuote : me.perms.createExpense)) throw new Error('ບໍ່ມີສິດສ້າງເອກະສານ');
     const recall = old && d.status === 'returned' && ((old.status === 'pending' && old.createdBy === me.id) || (old.status === 'rejected' && presOnly(me)));
     // ໃບລາຍຈ່າຍ: the creator sends it straight to the manager for an urgent transfer (no approval steps).
+    // ອມພ not transferred yet: its creator (or ແກ້ໄຂ/ລຶບ) may pull it back to a draft to fix it.
+    const fastBack = old && fastOpen(old) && d.status === 'draft' && isPres(me);
     const fast = d.type === 'payment' && (d.fields || {}).kind === 'fast' && d.status === 'approved' && (!old ? true : old.createdBy === me.id && old.status !== 'approved');
     if (old && old.status !== d.status && ['approved', 'rejected', 'returned'].includes(d.status) && !canApprove(me, old) && !recall && !fast) throw new Error('ບໍ່ມີສິດອະນຸມັດ');
     // ລົງເລກບັນຊີ on an approved doc: ກວດສອບ (or admin) may change only the account fields.
@@ -350,15 +357,15 @@ const API = {
     const acctOnly = old && old.status === 'approved' && d.status === 'approved' && strip(old) === strip(d)
       && nh.length >= oh.length && JSON.stringify(nh.slice(0, oh.length)) === JSON.stringify(oh) && nh.slice(oh.length).every(x => x && x.action === 'acct');
     if (acctOnly && !(isChk(me) || (me.perms || {}).manageUsers || canApprove(me, old))) throw new Error('ບໍ່ມີສິດລົງເລກບັນຊີ');
-    if (old && old.status === 'approved' && !acctOnly && !canApprove(me, old)) throw new Error('ເອກະສານອະນຸມັດແລ້ວ ແກ້ໄຂບໍ່ໄດ້');
+    if (old && old.status === 'approved' && !acctOnly && !fastBack && !canApprove(me, old)) throw new Error('ເອກະສານອະນຸມັດແລ້ວ ແກ້ໄຂບໍ່ໄດ້');
     if (old && MULTI(old.type) && old.status === 'pending' && d.status === 'pending' && sg(d) > sg(old) && !canApprove(me, old)) throw new Error('ບໍ່ມີສິດຜ່ານຂັ້ນຕອນນີ້');
     if (!old) { d.createdBy = me.id; d.no = await tmpNo(); }
     if (old && d.status !== 'approved') d.no = old.no;
     const fresh = d.status === 'approved' && (!old || old.status !== 'approved');
-    if (fresh) d.no = await nextNo(d.type);
+    if (fresh && !(old && old.no && !/^TMP/.test(String(old.no)))) d.no = await nextNo(d.type);
     if (false && fresh) later('push', async () => { const us = await users();
       await pushTo(us.filter(u => u.id !== me.id && !presOnly(u) && isChk(u)).map(u => u.id), docMsg(d, 'ລໍຖ້າລົງເລກບັນຊີ')); });
-    if (old && old.tf && !d.tf) d.tf = old.tf;
+    if (old && old.tf && !d.tf && !fastBack) d.tf = old.tf;
     await putDoc(d);
     notifyDoc(old, d, me);
     if (old && old.status === 'approved' && d.status !== 'approved') dropPdf(String(d.id));
@@ -371,7 +378,7 @@ const API = {
   async deleteDoc(r) {
     const me = await auth(r), d = await getDoc(r.id);
     if (!d) return true;
-    const ok = ['draft', 'returned'].includes(d.status) && (me.perms.edit || d.createdBy === me.id);
+    const ok = fastOpen(d) ? isPres(me) : ['draft', 'returned'].includes(d.status) && (me.perms.edit || d.createdBy === me.id);
     if (!ok) throw new Error('ລຶບໄດ້ສະເພາະເອກະສານ ຮ່າງ ຫຼື ສົ່ງກັບແກ້ໄຂ');
     await q('delete from docs where id=$1', [String(d.id)]); dropPdf(String(d.id)); return true;
   },
