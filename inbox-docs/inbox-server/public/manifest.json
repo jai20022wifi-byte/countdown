@@ -1,6 +1,6 @@
 {
-  "name": "INBOX ເອກະສານ",
-  "short_name": "INBOX",
+  "name": "INBOX ທົດສອບ",
+  "short_name": "INBOX ທົດສອບ",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
