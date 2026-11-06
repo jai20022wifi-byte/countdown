@@ -143,8 +143,9 @@ function fxMsg(x, title) { return { title, body: 'ໃບແລກປ່ຽນເ
 const acctReady = d => { const tf = d.tf || {}; return d.type === 'income' ? !!tf.billed || tf.status === 'done' : tf.status === 'created' || tf.status === 'done' || (Array.isArray(tf.parts) && tf.parts.length > 0); };
 const isChk = u => u.pos === 'ກວດສອບ' || !!(u.perms || {}).rpCheck;
 const canTfCreate = u => u.pos === 'ບັນຊີ' || !!(u.perms || {}).tfCreate, canTfDone = u => u.pos === 'ຜູ້ຈັດການ' || !!(u.perms || {}).tfDone;
-function fxTfMine(u, x) { if (presOnly(u) || fxSt(x) !== 'approved' || !x.tf) return false; const s = x.tf.status;
-  return (s === 'new' && canTfCreate(u)) || (s === 'created' && canTfDone(u)) || (s === 'done' && !x.tf.dl && !!(u.perms || {}).tfDownload); }
+function fxTfMine(u, x) { if (fxSt(x) !== 'approved' || !x.tf) return false; const s = x.tf.status, pr = !!x.tf.pres;
+  if (presOnly(u)) return pr && s === 'created';
+  return (s === 'new' && canTfCreate(u)) || (s === 'created' && !pr && canTfDone(u)) || (s === 'done' && !x.tf.dl && !!(u.perms || {}).tfDownload); }
 function notifyFx(old, x, me) { later('push', async () => {
   const us = await users(), ids = f => us.filter(u => u.id !== me.id && f(u)).map(u => u.id);
   if (fxSt(x) === 'pending' && (!old || fxSt(old) !== 'pending' || fxSg(old) !== fxSg(x)))
@@ -155,12 +156,14 @@ function notifyFx(old, x, me) { later('push', async () => {
   const os = old && old.tf ? old.tf.status : '', ns = x.tf && fxSt(x) === 'approved' ? x.tf.status : '';
   if (ns && ns !== os) {
     if (ns === 'new') await pushTo(ids(u => !presOnly(u) && canTfCreate(u)), fxMsg(x, 'ລໍຖ້າສ້າງໃບໂອນ'));
-    if (ns === 'created') await pushTo(ids(u => !presOnly(u) && canTfDone(u)), fxMsg(x, 'ລໍຖ້າໂອນເງິນ'));
+    if (ns === 'created') await pushTo(ids(u => x.tf.pres ? presOnly(u) : !presOnly(u) && canTfDone(u)), fxMsg(x, 'ລໍຖ້າໂອນເງິນ'));
     if (ns === 'done') await pushTo(ids(u => !presOnly(u) && ((u.perms || {}).tfDownload || u.id === x.byId)), fxMsg(x, 'ໂອນເງິນສຳເລັດແລ້ວ'));
   }
 }); }
 // Transfers can be paid in several installments (tf.parts). Old single transfers become one part for the full amount.
 const EPS = 0.005;
+// Money already received / paid out: an approved doc can then only be sent back by ຜູ້ດູແລ (manageUsers), not even ປະທານ.
+const moneyMoved = d => !!d && MULTI(d.type) && ((d.tf || {}).status === 'done' || tfParts(d.tf, 0).some(p => p.status === 'done'));
 function tfParts(tf, T) { tf = tf || {}; if (Array.isArray(tf.parts)) return tf.parts;
   if (tf.status === 'created' || tf.status === 'done') return [{ id:'p1', amt: +T || 0, img: tf.img || null, status: tf.status, by: tf.by, at: tf.at, doneBy: tf.doneBy, doneAt: tf.doneAt }];
   return []; }
@@ -187,6 +190,7 @@ async function badgeMap(ids) {
   const fxTf = (await q(`select data from fx where coalesce(data->>'status','approved') = 'approved' and data->'tf' is not null and (data->'tf'->>'status' <> 'done' or data->'tf'->'dl' is null)`)).map(r => r.data);
   for (const u of us) { let n = fxRows.filter(x => fxMine(u, x)).length + fxTf.filter(x => fxTfMine(u, x)).length + intlRows.filter(x => intlMine(u, x)).length + intlRows.reduce((t, x) => t + intlDueN(u, x), 0);
     for (const d of rows) {
+      if (presOnly(u) && d.status === 'approved' && d.backReq && !moneyMoved(d)) n++;
       if (presOnly(u)) { const td = (o => `${o.year}-${o.month}-${o.day}`)(parts(new Date()));
         if ((d.status === 'pending' && MULTI(d.type) && sg(d) === 3 && canApprove(u, d)) || (d.status === 'returned' && d.createdBy === u.id)
           || (d.status === 'approved' && d.type === 'income' && (d.tf || {}).status !== 'done' && d.fields && d.fields.dueDate && d.fields.dueDate < td)) n++; continue; }
@@ -247,6 +251,7 @@ function notifyDoc(old, d, me) { later('push', async () => {
   }
   if (d.status === 'approved' && (!old || old.status !== 'approved') && (d.type === 'expense' || d.type === 'payment'))
     await pushTo(ids(u => !pres(u) && canTfCreate(u)), docMsg(d, 'ລໍຖ້າສ້າງໃບໂອນ'));
+  if (old && !old.backReq && d.backReq && d.status === 'approved') await pushTo(ids(u => presOnly(u)), docMsg(d, 'ຄຳຂໍສົ່ງກັບແກ້ໄຂ'));
 }); }
 
 // ---------- API ----------
@@ -287,7 +292,8 @@ const API = {
     const intl = (await q('select data from intl order by sort desc')).map(x => x.data);
     const intlBanks = (await kvGet('intlBanks')) || [];
     const cp = me.perms || {}, cashOk = cp.cashView || cp.cashEdit || cp.manageUsers;
-    const cashAccs = cashOk ? (await q('select data from cash_accs order by sort')).map(x => x.data) : [], cashMoves = cashOk ? (await q('select data from cash_moves order by sort')).map(x => x.data) : [];
+    // Everyone needs the account list for the ໂຍກຍ້າຍ / ແລກປ່ຽນເງິນ dropdowns; balances stay with those who may see ບັນຊີເງິນ.
+    const cashAccs = (await q('select data from cash_accs order by sort')).map(x => x.data).map(a => cashOk ? a : { id:a.id, name:a.name, cur:a.cur, kind:a.kind, bank:a.bank, number:a.number, active:a.active, tfBy:a.tfBy }), cashMoves = cashOk ? (await q('select data from cash_moves order by sort')).map(x => x.data) : [];
     const acct = Object.fromEntries(await Promise.all(['jv','ob','coa','cfg','fx'].map(async k => [k, await kvGet('acct_' + k)])));
     return { users: us.map(pub), docs, intl, intlBanks, cashAccs, cashMoves, acct, projects: projects || [], customers: customers.map(x => x.data), epoch: epoch || '' };
   },
@@ -350,14 +356,21 @@ const API = {
     // ອມພ not transferred yet: its creator (or ແກ້ໄຂ/ລຶບ) may pull it back to a draft to fix it.
     const fastBack = old && fastOpen(old) && d.status === 'draft' && isPres(me);
     const fast = d.type === 'payment' && (d.fields || {}).kind === 'fast' && d.status === 'approved' && (!old ? true : old.createdBy === me.id && old.status !== 'approved');
-    if (old && old.status !== d.status && ['approved', 'rejected', 'returned'].includes(d.status) && !canApprove(me, old) && !recall && !fast) throw new Error('ບໍ່ມີສິດອະນຸມັດ');
+    // Once money was received / paid, only ຜູ້ດູແລ may take an approved doc out of ອະນຸມັດ (ປະທານ neither).
+    const leaving = old && old.status === 'approved' && d.status !== 'approved' && moneyMoved(old);
+    if (leaving && !me.perms.manageUsers) throw new Error('ມີການຮັບ ຫຼື ຈ່າຍເງິນແລ້ວ ສົ່ງກັບແກ້ໄຂໄດ້ສະເພາະຜູ້ດູແລລະບົບ');
+    if (old && old.status !== d.status && ['approved', 'rejected', 'returned'].includes(d.status) && !canApprove(me, old) && !recall && !fast && !leaving) throw new Error('ບໍ່ມີສິດອະນຸມັດ');
     // ລົງເລກບັນຊີ on an approved doc: ກວດສອບ (or admin) may change only the account fields.
     const strip = x => { const { acct, acctBy, acctAt, history, ...rest } = x || {}; return JSON.stringify(rest); };
     const oh = (old && old.history) || [], nh = d.history || [];
     const acctOnly = old && old.status === 'approved' && d.status === 'approved' && strip(old) === strip(d)
       && nh.length >= oh.length && JSON.stringify(nh.slice(0, oh.length)) === JSON.stringify(oh) && nh.slice(oh.length).every(x => x && x.action === 'acct');
     if (acctOnly && !(isChk(me) || (me.perms || {}).manageUsers || canApprove(me, old))) throw new Error('ບໍ່ມີສິດລົງເລກບັນຊີ');
-    if (old && old.status === 'approved' && !acctOnly && !fastBack && !canApprove(me, old)) throw new Error('ເອກະສານອະນຸມັດແລ້ວ ແກ້ໄຂບໍ່ໄດ້');
+    // ຂໍໃຫ້ປະທານສົ່ງກັບແກ້ໄຂ: anyone may add the request, nothing else, while no money has moved.
+    const stripB = x => { const { backReq, history, ...rest } = x || {}; return JSON.stringify(rest); };
+    const askBack = old && old.status === 'approved' && d.status === 'approved' && MULTI(old.type) && !moneyMoved(old) && !old.backReq && !!d.backReq && d.backReq.by === me.id
+      && stripB(old) === stripB(d) && nh.length === oh.length + 1 && JSON.stringify(nh.slice(0, oh.length)) === JSON.stringify(oh) && nh[oh.length] && nh[oh.length].action === 'backasked';
+    if (old && old.status === 'approved' && !acctOnly && !fastBack && !askBack && !leaving && !canApprove(me, old)) throw new Error('ເອກະສານອະນຸມັດແລ້ວ ແກ້ໄຂບໍ່ໄດ້');
     if (old && MULTI(old.type) && old.status === 'pending' && d.status === 'pending' && sg(d) > sg(old) && !canApprove(me, old)) throw new Error('ບໍ່ມີສິດຜ່ານຂັ້ນຕອນນີ້');
     if (!old) { d.createdBy = me.id; d.no = await tmpNo(); }
     if (old && d.status !== 'approved') d.no = old.no;
@@ -474,6 +487,12 @@ const API = {
   async saveFx(r) {
     const me = await auth(r), x = r.rec, old = (await q('select data from fx where id=$1', [String(x.id)]))[0];
     if (old && (old.data.status || 'approved') === 'approved' && x.status && x.status !== 'approved') dropPdf('fx-' + x.id);
+    // ຜູ້ກົດໂອນ of the source account decides ສ້າງ ແລະ ໂອນ ປະທານ (fixed when the transfer step opens); only ໄອດີປະທານ may press ໂອນ there.
+    if (x.tf) { const ot = old && old.data.tf;
+      if (ot) x.tf.pres = !!ot.pres;
+      else { const froms = [x, ...(x.extra || [])].map(y => y.cashFrom).filter(Boolean).map(String);
+        x.tf.pres = (x.kind || 'exchange') === 'move' && froms.length > 0 && (await q('select data from cash_accs where id = any($1)', [froms])).some(a => a.data.tfBy === 'president'); }
+      if (x.tf.pres && ot && ot.status !== 'done' && x.tf.status === 'done' && !presOnly(me)) throw new Error('ໃບນີ້ໃຫ້ປະທານເປັນຜູ້ກົດໂອນ'); }
     if (!old) {
       const n = (await q('select no from fx')).reduce((m, y) => Math.max(m, parseInt(String(y.no), 10) || 0), 0);
       x.no = String(n + 1).padStart(3, '0') + '/IN'; x.byId = me.id; x.by = me.name;
