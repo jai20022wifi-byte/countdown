@@ -10,13 +10,15 @@ const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/clien
 
 const ENV = process.env;
 const SESSION_DAYS = 7;
-const PERMS = ['intlRecv','intlSchedule','intlCreate','intlDone','intlDownload','rcvOverdue','createQuote','createExpense','viewAll','approveQuote','approveExpense','rpCheck','rpAccount','rpPresident','rpAccountIn','rpCheckIn','rpPresidentIn','manageApproved','edit','print','manageUsers','projCreate','projEdit','projDelete','tfCreate','tfDone','tfDownload','rcvBill','rcvPaid','rcvDownload','presidentOnly'];
+const PERMS = ['shipView','shipLot','shipSet','shipDone','shipCost','shipTruck','intlRecv','intlSchedule','intlCreate','intlDone','intlDownload','rcvOverdue','createQuote','createExpense','viewAll','approveQuote','approveExpense','rpCheck','rpAccount','rpPresident','rpAccountIn','rpCheckIn','rpPresidentIn','manageApproved','edit','print','manageUsers','projCreate','projEdit','projDelete','tfCreate','tfDone','tfDownload','rcvBill','rcvPaid','rcvDownload','presidentOnly'];
 const TZ = 'Asia/Vientiane';
 
 // ---------- database ----------
 const dbUrl = String(ENV.DATABASE_URL || '').replace(/([?&])sslmode=[^&]*&?/, '$1').replace(/[?&]$/, '');
 const db = new Pool({ connectionString: dbUrl, ssl: /localhost|127\.0\.0\.1/.test(dbUrl) ? false : { rejectUnauthorized: false }, max: 10 });
 const q = (sql, p) => db.query(sql, p).then(r => r.rows);
+// Postgres jsonb re-orders object keys, so compare stored vs sent data with keys sorted.
+const canon = v => JSON.stringify(v, (k, x) => x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map(y => [y, x[y]])) : x);
 
 async function migrate() {
   await q(`create table if not exists users (id text primary key, name text, pw_hash text, salt text, perms jsonb default '{}'::jsonb, sig text default '', pos text default '', sort bigserial)`);
@@ -30,6 +32,7 @@ async function migrate() {
   await q(`create table if not exists intl (id text primary key, no text, status text, sort bigserial, data jsonb)`);
   await q(`create table if not exists cash_accs (id text primary key, sort bigserial, data jsonb)`);
   await q(`create table if not exists cash_moves (id text primary key, sort bigserial, data jsonb)`);
+  await q(`create table if not exists ship (id text primary key, kind text, sort bigserial, data jsonb)`);
   await q(`create table if not exists push_subs (endpoint text primary key, user_id text, sub jsonb)`);
   let v = await kvGet('vapid'); if (!v) { v = webpush.generateVAPIDKeys(); await kvSet('vapid', v); }
   webpush.setVapidDetails('mailto:inboxsole@gmail.com', v.publicKey, v.privateKey); VAPID_PUB = v.publicKey;
@@ -218,6 +221,9 @@ const isPres = u => u.pos === 'ປະທານ' || presOnly(u) || !!(u.perms || 
 function fastOpen(x) { const tf = x.tf || {}, parts = tf.parts || [], fast = x.type === 'payment' && (x.fields || {}).kind === 'fast';
   if (!['payment','expense'].includes(x.type) || x.status !== 'approved' || tf.status === 'done' || parts.some(p => p.status === 'done')) return false;
   return fast || (!parts.length && tf.status !== 'created'); }
+// ສິດ ງານຂົນສົ່ງ / ຕູ້; ຜູ້ດູແລ (manageUsers) ໄດ້ທຸກສິດ.
+const shipCan = (u, k) => !!((u.perms || {}).manageUsers || (u.perms || {})[k]);
+const shipAny = u => ['shipView','shipLot','shipSet','shipDone','shipCost','shipTruck'].some(k => shipCan(u, k));
 function presOnly(u) { return !!(u.perms || {}).presidentOnly; }
 // ໂອນເງິນໄປຕ່າງປະເທດ: sched (ປະທານກຳນົດວັນ) › create (ບັນຊີສ້າງໃບໂອນ) › transfer (ຜູ້ຈັດການໂອນ) › done
 const INTL_PERM = { sched: 'intlSchedule', create: 'intlCreate', transfer: 'intlCreate' };
@@ -288,14 +294,14 @@ const API = {
   async me(r) { return pub(await auth(r)); },
   async load(r) {
     const me = await auth(r);
-    const [us, docs, projects, customers, epoch] = await Promise.all([users(), visibleDocs(me, r.from || ''), kvGet('projects'), q('select data from customers order by sort'), kvGet('epoch')]);
+    const [us, docs, projects, customers, epoch, projSpecial] = await Promise.all([users(), visibleDocs(me, r.from || ''), kvGet('projects'), q('select data from customers order by sort'), kvGet('epoch'), kvGet('projSpecial')]);
     const intl = (await q('select data from intl order by sort desc')).map(x => x.data);
     const intlBanks = (await kvGet('intlBanks')) || [];
     const cp = me.perms || {}, cashOk = cp.cashView || cp.cashEdit || cp.manageUsers;
     // Everyone needs the account list for the ໂຍກຍ້າຍ / ແລກປ່ຽນເງິນ dropdowns; balances stay with those who may see ບັນຊີເງິນ.
     const cashAccs = (await q('select data from cash_accs order by sort')).map(x => x.data).map(a => cashOk ? a : { id:a.id, name:a.name, cur:a.cur, kind:a.kind, bank:a.bank, number:a.number, active:a.active, tfBy:a.tfBy }), cashMoves = cashOk ? (await q('select data from cash_moves order by sort')).map(x => x.data) : [];
     const acct = Object.fromEntries(await Promise.all(['jv','ob','coa','cfg','fx'].map(async k => [k, await kvGet('acct_' + k)])));
-    return { users: us.map(pub), docs, intl, intlBanks, cashAccs, cashMoves, acct, projects: projects || [], customers: customers.map(x => x.data), epoch: epoch || '' };
+    return { users: us.map(pub), docs, intl, intlBanks, cashAccs, cashMoves, acct, projects: projects || [], projSpecial: projSpecial || [], customers: customers.map(x => x.data), epoch: epoch || '' };
   },
   // ບັນຊີ data shared by every device: ບັນຊີປະຈຳວັນ, ຍອດຍົກມາ, ເລກລະຫັດບັນຊີ edits, auto-posting settings, exchange rates (with history).
   async acctSave(r) {
@@ -314,6 +320,11 @@ const API = {
     const me = await auth(r), p = me.perms || {};
     if (!(p.projCreate || p.projEdit || p.projDelete || p.manageUsers)) throw new Error('ບໍ່ມີສິດແກ້ໂຄງການ');
     const l = [...new Set((r.list || []).map(x => String(x).trim()).filter(Boolean))]; await kvSet('projects', l); return l;
+  },
+  async saveProjSpecial(r) {
+    const me = await auth(r), p = me.perms || {};
+    if (!(p.projCreate || p.projEdit || p.manageUsers)) throw new Error('ບໍ່ມີສິດແກ້ໂຄງການ');
+    const l = [...new Set((r.list || []).map(x => String(x).trim()).filter(Boolean))]; await kvSet('projSpecial', l); return l;
   },
   async upload(r) {
     await auth(r);
@@ -361,17 +372,27 @@ const API = {
     if (leaving && !me.perms.manageUsers) throw new Error('ມີການຮັບ ຫຼື ຈ່າຍເງິນແລ້ວ ສົ່ງກັບແກ້ໄຂໄດ້ສະເພາະຜູ້ດູແລລະບົບ');
     if (old && old.status !== d.status && ['approved', 'rejected', 'returned'].includes(d.status) && !canApprove(me, old) && !recall && !fast && !leaving) throw new Error('ບໍ່ມີສິດອະນຸມັດ');
     // ລົງເລກບັນຊີ on an approved doc: ກວດສອບ (or admin) may change only the account fields.
-    const strip = x => { const { acct, acctBy, acctAt, history, ...rest } = x || {}; return JSON.stringify(rest); };
+    const strip = x => { const { acct, acctBy, acctAt, history, ...rest } = x || {}; return canon(rest); };
     const oh = (old && old.history) || [], nh = d.history || [];
     const acctOnly = old && old.status === 'approved' && d.status === 'approved' && strip(old) === strip(d)
-      && nh.length >= oh.length && JSON.stringify(nh.slice(0, oh.length)) === JSON.stringify(oh) && nh.slice(oh.length).every(x => x && x.action === 'acct');
+      && nh.length >= oh.length && canon(nh.slice(0, oh.length)) === canon(oh) && nh.slice(oh.length).every(x => x && x.action === 'acct');
     if (acctOnly && !(isChk(me) || (me.perms || {}).manageUsers || canApprove(me, old))) throw new Error('ບໍ່ມີສິດລົງເລກບັນຊີ');
     // ຂໍໃຫ້ປະທານສົ່ງກັບແກ້ໄຂ: anyone may add the request, nothing else, while no money has moved.
-    const stripB = x => { const { backReq, history, ...rest } = x || {}; return JSON.stringify(rest); };
+    const stripB = x => { const { backReq, history, ...rest } = x || {}; return canon(rest); };
     const askBack = old && old.status === 'approved' && d.status === 'approved' && MULTI(old.type) && !moneyMoved(old) && !old.backReq && !!d.backReq && d.backReq.by === me.id
-      && stripB(old) === stripB(d) && nh.length === oh.length + 1 && JSON.stringify(nh.slice(0, oh.length)) === JSON.stringify(oh) && nh[oh.length] && nh[oh.length].action === 'backasked';
+      && stripB(old) === stripB(d) && nh.length === oh.length + 1 && canon(nh.slice(0, oh.length)) === canon(oh) && nh[oh.length] && nh[oh.length].action === 'backasked';
     if (old && old.status === 'approved' && !acctOnly && !fastBack && !askBack && !leaving && !canApprove(me, old)) throw new Error('ເອກະສານອະນຸມັດແລ້ວ ແກ້ໄຂບໍ່ໄດ້');
     if (old && MULTI(old.type) && old.status === 'pending' && d.status === 'pending' && sg(d) > sg(old) && !canApprove(me, old)) throw new Error('ບໍ່ມີສິດຜ່ານຂັ້ນຕອນນີ້');
+    // ຂົນສົ່ງ / ຕູ້: 1 ຕູ້ ເກັບເງິນໄດ້ຄັ້ງດຽວ · 1 ຊຸດ ຈ່າຍແຕ່ລະປະເພດໄດ້ຄັ້ງດຽວ (ກວດທຸກໃບໃນລະບົບ)
+    if (d.status !== 'rejected') { const f = d.fields || {};
+      if (d.type === 'income' && Array.isArray(f.shipConts) && f.shipConts.length) {
+        const rows = await q("select no, data->'fields'->'shipConts' as k from docs where type='income' and status<>'rejected' and id<>$1 and jsonb_typeof(data->'fields'->'shipConts')='array'", [String(d.id)]);
+        const taken = new Map(); rows.forEach(r => (r.k || []).forEach(k => taken.set(k, r.no)));
+        const hit = f.shipConts.filter(k => taken.has(k)); if (hit.length) throw new Error('ມີຕູ້ທີ່ເກັບເງິນແລ້ວໃນໃບອື່ນ (' + [...new Set(hit.map(k => taken.get(k)))].join(', ') + ') ກະລຸນາໂຫຼດໃໝ່'); }
+      if ((d.type === 'payment' || d.type === 'expense') && f.payKind && Array.isArray(f.shipSets) && f.shipSets.length) {
+        const rows = await q("select no, data->'fields'->'shipSets' as k from docs where type in ('payment','expense') and status<>'rejected' and id<>$1 and data->'fields'->>'payKind'=$2", [String(d.id), String(f.payKind)]);
+        const taken = new Map(); rows.forEach(r => (Array.isArray(r.k) ? r.k : []).forEach(k => taken.set(k, r.no)));
+        const hit = f.shipSets.filter(k => taken.has(k)); if (hit.length) throw new Error('ມີຊຸດທີ່ຈ່າຍ ' + f.payKind + ' ແລ້ວໃນໃບອື່ນ (' + [...new Set(hit.map(k => taken.get(k)))].join(', ') + ')'); } }
     if (!old) { d.createdBy = me.id; d.no = await tmpNo(); }
     if (old && d.status !== 'approved') d.no = old.no;
     const fresh = d.status === 'approved' && (!old || old.status !== 'approved');
@@ -484,6 +505,57 @@ const API = {
     return { fx: (await fxList()).filter(x => !from || String(x.date || day(x.createdAt)) >= from), fxDrafts: drafts ? drafts.data : [] };
   },
   async listFx(r) { await auth(r); return fxList(); },
+  // ຂົນສົ່ງ / ຕູ້: BL and ຊຸດແຈ້ງພາສີ. A ຊຸດ gets its number (e.g. 1126N14 = ເດືອນ 11 ປີ 26 ລຳດັບ 14) when it is marked done; a container sits in one ຊຸດ only.
+  async listShip(r) { const me = await auth(r); if (!shipAny(me)) return [];
+    return (await q('select data from ship order by sort')).map(x => x.data); },
+  async saveShip(r) {
+    const me = await auth(r), x = r.rec || {};
+    if (!x.id || !['lot', 'bl', 'set', 'log', 'tco'].includes(x.kind)) throw new Error('ຂໍ້ມູນບໍ່ຄົບ');
+    const o = ((await q('select data from ship where id=$1', [String(x.id)]))[0] || {}).data;
+    if (x.kind === 'log') {   // ປະຫວັດ: add-only, stamped by the server
+      if (o || !shipAny(me)) throw new Error('ບໍ່ມີສິດ');
+      const rec = { id: String(x.id), kind:'log', ref: String(x.ref || ''), text: String(x.text || '').slice(0, 2000), by: me.id, at: new Date().toISOString() };
+      await q('insert into ship (id,kind,data) values ($1,$2,$3)', [rec.id, 'log', JSON.stringify(rec)]); return rec; }
+    const need = k => { if (!shipCan(me, k)) throw new Error('ບໍ່ມີສິດ'); };
+    if (x.kind === 'tco') need('shipTruck');
+    else if (x.kind !== 'set') need('shipLot');
+    else { if (!o || canon(o.items) !== canon(x.items)) need('shipSet');
+      if (x.status === 'done' && (!o || o.status !== 'done')) need('shipDone');
+      if (canon((o || {}).cost || null) !== canon(x.cost || null)) need('shipCost');
+      if (canon((o || {}).truckPaid || null) !== canon(x.truckPaid || null) || !!(o || {}).truckReopen !== !!x.truckReopen) need('shipTruck');
+      if (canon((o || {}).trucks || {}) !== canon(x.trucks || {})) { need('shipTruck'); if (!o || o.status !== 'done') throw new Error('ຈັດລົດລາກໄດ້ສະເພາະຊຸດທີ່ມີເລກແລ້ວ'); } }
+    if (x.kind === 'set') {
+      if (o && o.no) x.no = o.no;
+      { const taken = new Set((await q("select data from ship where kind='set' and id<>$1", [String(x.id)])).flatMap(y => (y.data.items || []).map(it => it.bl + '|' + it.c)));
+        if (!(x.items || []).length || (x.items || []).some(it => taken.has(it.bl + '|' + it.c))) throw new Error('ມີຕູ້ທີ່ຖືກຈັດຊຸດແລ້ວ ກະລຸນາໂຫຼດໃໝ່'); }
+      if (o && o.status === 'done' && canon(o.items) !== canon(x.items)) throw new Error('ຊຸດທີ່ມີເລກແລ້ວ ເພີ່ມ/ລຶບຕູ້ບໍ່ໄດ້');
+      if (x.status === 'done' && !x.no) { const p = parts(new Date()), pre = String(+p.month) + p.year.slice(2) + 'N';   // e.g. 1126N14
+        const n = (await q("select data->>'no' as no from ship where kind='set' and data->>'no' like $1", [pre + '%'])).reduce((m, y) => Math.max(m, +String(y.no).slice(pre.length) || 0), 0) + 1;
+        x.no = pre + n; }
+    }
+    if (x.kind === 'lot') {   // a container number may sit in one ຊຸດຮັບເຂົ້າ only
+      const norm = v => String(v || '').trim().toUpperCase(), mine = (x.bls || []).flatMap(b => (b.conts || []).map(c => norm(c.no))).filter(Boolean), taken = new Map();
+      for (const y of (await q("select data from ship where kind in ('lot','bl') and id<>$1", [String(x.id)])).map(r => r.data))
+        for (const b of (y.kind === 'lot' ? (y.bls || []) : [y])) for (const c of (b.conts || [])) if (norm(c.no)) taken.set(norm(c.no), y.no || '');
+      const clash = [...new Set(mine.filter(n => taken.has(n)))];
+      if (clash.length) throw new Error('ເລກຕູ້ຊ້ຳກັບຊຸດຮັບເຂົ້າອື່ນ: ' + clash.map(n => n + (taken.get(n) ? ' (' + taken.get(n) + ')' : '')).join(', ')); }
+    if (x.kind === 'lot') { x.no = (o && o.no) || x.no || '';
+      if (!x.no) { const p = parts(new Date()), pre = String(+p.month) + p.year.slice(2) + 'L';
+        const n = (await q("select data->>'no' as no from ship where kind in ('lot','bl') and data->>'no' like $1", [pre + '%'])).reduce((m, y) => Math.max(m, +String(y.no).slice(pre.length) || 0), 0) + 1;
+        x.no = pre + String(n).padStart(3, '0'); } }
+    if (!o) x.by = me.id;
+    await q('insert into ship (id,kind,data) values ($1,$2,$3) on conflict (id) do update set kind=excluded.kind, data=excluded.data', [String(x.id), x.kind, JSON.stringify(x)]);
+    return x;
+  },
+  async deleteShip(r) {
+    const me = await auth(r); const o = ((await q('select data from ship where id=$1', [String(r.id)]))[0] || {}).data;
+    if (o && o.kind === 'log') throw new Error('ລຶບປະຫວັດບໍ່ໄດ້');
+    if (o && !shipCan(me, o.kind === 'set' ? 'shipSet' : o.kind === 'tco' ? 'shipTruck' : 'shipLot')) throw new Error('ບໍ່ມີສິດ');
+    if (o && o.kind === 'set' && o.status === 'done') throw new Error('ຊຸດທີ່ມີເລກແລ້ວລຶບບໍ່ໄດ້');
+    if (o && (o.kind === 'bl' || o.kind === 'lot')) { const ids = new Set(o.kind === 'lot' ? (o.bls || []).map(b => b.id) : [o.id]);
+      if ((await q("select data from ship where kind='set'")).some(y => (y.data.items || []).some(it => ids.has(it.bl)))) throw new Error('ມີຕູ້ຢູ່ໃນຊຸດແຈ້ງພາສີແລ້ວ ລຶບບໍ່ໄດ້'); }
+    await q('delete from ship where id=$1', [String(r.id)]); return true;
+  },
   async saveFx(r) {
     const me = await auth(r), x = r.rec, old = (await q('select data from fx where id=$1', [String(x.id)]))[0];
     if (old && (old.data.status || 'approved') === 'approved' && x.status && x.status !== 'approved') dropPdf('fx-' + x.id);
@@ -574,7 +646,7 @@ const API = {
 };
 
 // Writes run one at a time (like the old script lock) so numbers never collide.
-const READS = new Set(['pushKey', 'pushUnsubscribe', 'me', 'load', 'listDocs', 'listUsers', 'getFile', 'listNoPdf', 'loadFx', 'listFx', 'login', 'logout', 'upload']);
+const READS = new Set(['pushKey', 'pushUnsubscribe', 'me', 'load', 'listDocs', 'listUsers', 'getFile', 'listNoPdf', 'loadFx', 'listFx', 'listShip', 'login', 'logout', 'upload']);
 let chain = Promise.resolve();
 const serial = fn => { const p = chain.then(fn, fn); chain = p.catch(() => {}); return p; };
 
